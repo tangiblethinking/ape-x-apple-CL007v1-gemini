@@ -308,6 +308,11 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
   const serperValid=wizSerperKey.length>10;
   const keysComplete=anthropicValid&&serperValid;
 
+  // Clear API key when provider changes to avoid validation confusion
+  useEffect(()=>{
+    setWizAnthropicKey('');
+  },[wizProvider]);
+
   const upd=(k:keyof CandidateProfile,v:CandidateProfile[keyof CandidateProfile])=>
     setProfile(p=>({...p,[k]:v}));
 
@@ -334,7 +339,7 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
     try{
       const res=await fetch('/api/extract-profile',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({resumeText:text,apiKeyOverride:wizAnthropicKey}),
+        body:JSON.stringify({resumeText:text,apiKeyOverride:wizAnthropicKey,aiProvider:wizProvider}),
       });
       if(res.ok){
         const data=await safeJson(res);

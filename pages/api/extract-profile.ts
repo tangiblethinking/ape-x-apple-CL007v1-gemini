@@ -1,26 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { callAI, AIProvider } from '../../lib/ai-providers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { resumeText, apiKeyOverride } = req.body;
-  const anthropicKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  const { resumeText, apiKeyOverride, aiProvider } = req.body;
+  const provider: AIProvider = aiProvider || 'claude';
+  const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
 
-  if (!anthropicKey) return res.status(400).json({ error: 'No Anthropic API key configured.' });
+  if (!apiKey) return res.status(400).json({ error: 'No API key configured.' });
   if (!resumeText) return res.status(400).json({ error: 'No resume text provided.' });
 
-  try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1500,
-        system: `You are a resume parser. Extract structured profile data from the resume text provided.
+  const systemPrompt = `You are a resume parser. Extract structured profile data from the resume text provided.
 
 Return ONLY a valid JSON object with exactly these fields:
 {
@@ -50,21 +41,22 @@ Rules:
 - For targetSectors: infer from their employers and roles only — return empty array if unclear
 - For salary: only populate if explicitly stated in resume, otherwise use 0
 - Strip https:// and www. from linkedinUrl and portfolioUrl
-- Return ONLY the JSON object, no markdown, no explanation`,
-        messages: [
-          { role: 'user', content: `Extract profile data from this resume:\n\n${resumeText.slice(0, 10000)}` },
-        ],
-      }),
-    });
+- Return ONLY the JSON object, no markdown, no explanation`;
 
-    if (!claudeRes.ok) {
-      const err = await claudeRes.json();
-      return res.status(claudeRes.status).json({ error: err.error?.message || 'Claude API error' });
+  try {
+    const aiResponse = await callAI(
+      provider,
+      apiKey,
+      [{ role: 'user', content: `Extract profile data from this resume:\n\n${resumeText.slice(0, 10000)}` }],
+      systemPrompt,
+      1500
+    );
+
+    if (aiResponse.error) {
+      return res.status(500).json({ error: aiResponse.error });
     }
 
-    const data = await claudeRes.json();
-    const raw = data.content?.[0]?.text || '{}';
-    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleaned = aiResponse.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
     let profile;
     try {
