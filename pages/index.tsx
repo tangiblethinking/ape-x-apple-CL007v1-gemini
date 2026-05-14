@@ -539,7 +539,7 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,onComp
       case 1: return (
         <div>
           <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:24,marginBottom:8}}>Upload Your Documents</h2>
-          <p style={{fontSize:14,color:'#5a5449',lineHeight:1.7,marginBottom:20}}>
+          <p style={{fontSize:14,color:'rgba(60,60,67,0.6)',lineHeight:1.7,marginBottom:20}}>
             Upload your resume and cover letter. We'll extract your profile automatically. Supports HTML, DOCX, and text-based PDF.
           </p>
 
@@ -1217,7 +1217,7 @@ function AnalyzeJDInput({excl,onContinue,onClose}:{
           <textarea value={jdText} onChange={e=>setJdText(e.target.value)} rows={7} placeholder="Paste the full job description text here..."
             style={{width:'100%',padding:'9px 12px',border:'1.5px solid #d6d0c4',borderRadius:4,fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical',outline:'none'}}/>
         )}
-        <p style={{fontSize:11,color:'#7a7469',marginTop:10}}>Neither is required — click Continue to add the card with available information.</p>
+        <p style={{fontSize:12,color:'rgba(60,60,67,0.45)',marginTop:10,letterSpacing:'-0.01em'}}>Neither is required — click Continue to add the card with available information.</p>
       </div>
       <div style={{padding:'14px 22px',borderTop:'1px solid #d6d0c4',display:'flex',gap:10,justifyContent:'flex-end',position:'sticky',bottom:0,background:'#fff'}}>
         <button onClick={()=>onContinue(jdText)} style={{padding:'9px 18px',background:'#0f0f0f',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontWeight:700,fontSize:13}}>Continue</button>
@@ -1391,7 +1391,7 @@ function SaveImportModal({onClose,onImportComplete}:{onClose:()=>void;onImportCo
         <div style={{padding:'20px 24px 14px',borderBottom:'1px solid #d6d0c4',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div>
             <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',color:'#c8460a',fontWeight:700,marginBottom:4}}>Portable Data</div>
-            <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:20}}>Save or Import Job Board</h2>
+            <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.02em',color:'#000'}}>Save or Import Job Board</h2>
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'#777'}}><X size={20}/></button>
         </div>
@@ -1913,7 +1913,7 @@ export default function Home() {
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:800,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
           <div style={{background:'#fff',borderRadius:4,width:'100%',maxWidth:560,maxHeight:'80vh',overflowY:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.2)'}}>
             <div style={{padding:'18px 22px 14px',borderBottom:'1px solid #d6d0c4',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,background:'#fff'}}>
-              <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:20}}>Manage Saved Searches</h2>
+              <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.02em',color:'#000'}}>Manage Saved Searches</h2>
               <button onClick={()=>{setShowManageHistory(false);setHistoryToDelete(new Set());}} style={{background:'none',border:'none',cursor:'pointer',color:'#777'}}><X size={19}/></button>
             </div>
             <div style={{padding:22}}>
@@ -2032,26 +2032,27 @@ export default function Home() {
 
         {/* SEARCH TAB */}
         {tab==='search'&&(
-          <main className="main-pad" style={{maxWidth:680,margin:'0 auto',padding:'40px 20px 60px'}}>
+          <main className="main-pad" style={{maxWidth:680,margin:'0 auto',padding:'32px 20px 60px'}}>
             <div style={{marginBottom:28}}>
-              <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',color:'#c8460a',fontWeight:700,marginBottom:8}}>Ape-X Job Board</div>
-              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
-                <h1 style={{fontFamily:'DM Serif Display,serif',fontSize:30,fontWeight:400,marginBottom:10}}>Find Your Next Role</h1>
-                <button onClick={()=>setShowWizard(true)} style={{display:'flex',alignItems:'center',gap:6,background:'#0f0f0f',color:'#f5f2ec',border:'none',borderRadius:4,padding:'10px 16px',fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                  <Wand2 size={14}/>Launch Guided Experience
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16,flexWrap:'wrap',marginBottom:6}}>
+                <div>
+                  <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-0.03em',marginBottom:6,color:'#000'}}>Find Your Next Role</h1>
+                  <p style={{fontSize:14,color:'rgba(60,60,67,0.6)',lineHeight:1.6}}>Upload your resume and cover letter, then run a live two-pass verified search.</p>
+                </div>
+                <button onClick={()=>setShowWizard(true)} style={{display:'flex',alignItems:'center',gap:6,background:'rgba(0,122,255,0.1)',color:'#007AFF',border:'none',borderRadius:50,padding:'10px 16px',fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                  <Wand2 size={14}/>Setup Wizard
                 </button>
               </div>
-              <p style={{fontSize:14,color:'#7a7469',lineHeight:1.7}}>Upload your resume and cover letter, then run a live two-pass verified job search.</p>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14,marginBottom:26}}>
               <UploadCard type="resume" meta={resumeMeta} onUpload={f=>handleUpload(f,'resume')}/>
               <UploadCard type="cover" meta={coverMeta} onUpload={f=>handleUpload(f,'cover')}/>
             </div>
-            {searchError&&<div style={{background:'#f5d5c8',color:'#6b2200',padding:'11px 14px',borderRadius:4,marginBottom:18,fontSize:13,display:'flex',gap:8,alignItems:'center'}}><AlertTriangle size={14}/>{searchError}</div>}
+            {searchError&&<div style={{background:'rgba(255,59,48,0.08)',color:'#D70015',padding:'12px 14px',borderRadius:12,marginBottom:18,fontSize:13,display:'flex',gap:8,alignItems:'center',border:'0.5px solid rgba(255,59,48,0.2)'}}><AlertTriangle size={14}/>{searchError}</div>}
 
             {/* Hard block — missing API keys */}
             {(!anthropicKey||!serperKey)&&(
-              <div style={{background:'#fff8f6',border:'1px solid #e8bead',borderRadius:4,padding:'12px 16px',marginBottom:16,fontSize:13,color:'#6b2200',display:'flex',alignItems:'flex-start',gap:10}}>
+              <div style={{background:'rgba(255,149,0,0.08)',border:'0.5px solid rgba(255,149,0,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:16,fontSize:13,color:'#B56000',display:'flex',alignItems:'flex-start',gap:10}}>
                 <AlertTriangle size={15} color="#c8460a" style={{flexShrink:0,marginTop:1}}/>
                 <div>
                   <strong>API keys required to search.</strong> Missing:{' '}
@@ -2066,7 +2067,7 @@ export default function Home() {
 
             {/* Soft warn — missing titles */}
             {anthropicKey&&serperKey&&profile.targetTitles.length===0&&(
-              <div style={{background:'#f2e8cb',border:'1px solid #e8d5a0',borderRadius:4,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#7a5a1a',display:'flex',alignItems:'center',gap:8}}>
+              <div style={{background:'rgba(255,204,0,0.1)',border:'0.5px solid rgba(255,204,0,0.35)',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#7A5500',display:'flex',alignItems:'center',gap:8}}>
                 <AlertTriangle size={13} color="#b5882e"/>
                 No job titles configured — search may return broad results.{' '}
                 <button onClick={()=>setShowWizard(true)} style={{background:'none',border:'none',cursor:'pointer',color:'#b5882e',fontWeight:700,fontSize:12,padding:0,textDecoration:'underline'}}>Run Setup Wizard</button>
@@ -2074,16 +2075,16 @@ export default function Home() {
             )}
 
             <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-              <button onClick={runSearch} disabled={!anthropicKey||!serperKey} style={{display:'flex',alignItems:'center',gap:7,background:(!anthropicKey||!serperKey)?'#ccc':'#c8460a',color:'#fff',border:'none',borderRadius:4,padding:'12px 26px',fontSize:14,fontWeight:700,cursor:(!anthropicKey||!serperKey)?'not-allowed':'pointer',opacity:(!anthropicKey||!serperKey)?0.7:1}}>
+              <button onClick={runSearch} disabled={!anthropicKey||!serperKey} style={{display:'flex',alignItems:'center',gap:7,background:(!anthropicKey||!serperKey)?'#C7C7CC':'#007AFF',color:'#fff',border:'none',borderRadius:50,padding:'12px 26px',fontSize:14,fontWeight:600,cursor:(!anthropicKey||!serperKey)?'not-allowed':'pointer',letterSpacing:'-0.01em'}}>
                 <Search size={16}/>Run Job Search
               </button>
-              {specialInstructions&&<span style={{fontSize:11,background:'#f2e8cb',color:'#b5882e',padding:'3px 10px',borderRadius:3,fontWeight:700}}>Special active</span>}
-              <button onClick={()=>setShowSpecial(true)} style={{display:'flex',alignItems:'center',gap:5,background:'transparent',border:'1.5px solid #d6d0c4',borderRadius:4,padding:'9px 14px',fontSize:13,fontWeight:600,cursor:'pointer',color:'#0f0f0f'}}>
+              {specialInstructions&&<span style={{fontSize:11,background:'rgba(255,149,0,0.12)',color:'#B56000',padding:'3px 10px',borderRadius:50,fontWeight:600}}>Special active</span>}
+              <button onClick={()=>setShowSpecial(true)} style={{display:'flex',alignItems:'center',gap:5,background:'rgba(120,120,128,0.1)',border:'none',borderRadius:50,padding:'10px 16px',fontSize:13,fontWeight:600,cursor:'pointer',color:'#000'}}>
                 <Sparkles size={13}/>Special Instructions
               </button>
             </div>
-            <p style={{fontSize:11,color:'#7a7469',marginTop:10}}>~30–60 sec · two-pass verified · edit instructions in Settings</p>
-            <button className="mobile-only" onClick={()=>setShowMobileFAB(true)} style={{position:'fixed',bottom:80,right:24,zIndex:100,width:50,height:50,borderRadius:'50%',background:'#0f0f0f',color:'#fff',border:'none',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 16px rgba(0,0,0,0.3)',cursor:'pointer'}}>
+            <p style={{fontSize:12,color:'rgba(60,60,67,0.45)',marginTop:10,letterSpacing:'-0.01em'}}>~30–60 sec · two-pass verified · edit instructions in Settings</p>
+            <button className="mobile-only" onClick={()=>setShowMobileFAB(true)} style={{position:'fixed',bottom:80,right:24,zIndex:100,width:52,height:52,borderRadius:'50%',background:'#007AFF',color:'#fff',border:'none',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 20px rgba(0,122,255,0.4)',cursor:'pointer'}}>
               <FileText size={20}/>
             </button>
           </main>
@@ -2095,9 +2096,9 @@ export default function Home() {
             {jobs.length===0?(
               <div style={{textAlign:'center',padding:'60px 24px'}}>
                 <div style={{marginBottom:20}}>
-                  <p style={{fontSize:16,fontWeight:700,color:'#0f0f0f',marginBottom:8,fontFamily:'DM Serif Display,serif'}}>Our apes didn&apos;t forage any jobs with these requirements.</p>
-                  <p style={{fontSize:14,color:'#5a5449',lineHeight:1.7,marginBottom:20}}>Send them out again by adjusting your settings.</p>
-                  <button onClick={()=>setShowWizard(true)} style={{padding:'11px 22px',background:'#c8460a',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontWeight:700,fontSize:14,marginBottom:24}}>Run Search Wizard</button>
+                  <p style={{fontSize:18,fontWeight:700,color:'#000',marginBottom:8,letterSpacing:'-0.02em'}}>Our apes didn&apos;t forage any jobs with these requirements.</p>
+                  <p style={{fontSize:14,color:'rgba(60,60,67,0.6)',lineHeight:1.7,marginBottom:20}}>Send them out again by adjusting your settings.</p>
+                  <button onClick={()=>setShowWizard(true)} style={{padding:'11px 24px',background:'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:14,marginBottom:24}}>Run Search Wizard</button>
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/Ape-X.png" alt="Ape-X" style={{width:'100%',maxWidth:200,height:'auto',objectFit:'contain',mixBlendMode:'multiply'}}/>
@@ -2105,24 +2106,24 @@ export default function Home() {
             ):(
               <>
                 <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
-                  <button onClick={()=>setShowHistory(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#0f0f0f',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontWeight:700,fontSize:12}}>
+                  <button onClick={()=>setShowHistory(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'rgba(120,120,128,0.12)',color:'#000',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:12}}>
                     <Clock size={13}/>Saved Searches ({searchHistory.length}/5)
                   </button>
                 </div>
-                <div style={{background:'#ede9e0',border:'1px solid #d6d0c4',padding:'10px 14px',borderRadius:4,marginBottom:22,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{background:'rgba(255,255,255,0.8)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',border:'0.5px solid rgba(60,60,67,0.18)',padding:'10px 14px',borderRadius:12,marginBottom:22,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                   <Filter size={12} style={{color:'#7a7469',marginRight:2}}/>
                   <span style={{fontSize:11,color:'#7a7469',fontWeight:600,marginRight:4}}>Location:</span>
                   {([['false','All'],['true','Remote'],['notremote','Not Remote']] as [string,string][]).map(([val,label])=>(
-                    <button key={val} onClick={()=>setFilterRemote(val==='false'?false:val==='true'?true:'notremote')} style={{background:String(filterRemote)===val?'#0f0f0f':'transparent',color:String(filterRemote)===val?'#f5f2ec':'#7a7469',border:`1px solid ${String(filterRemote)===val?'#0f0f0f':'#d6d0c4'}`,borderRadius:3,padding:'4px 10px',fontSize:12,fontWeight:500,cursor:'pointer'}}>{label}</button>
+                    <button key={val} onClick={()=>setFilterRemote(val==='false'?false:val==='true'?true:'notremote')} style={{background:String(filterRemote)===val?'#007AFF':'rgba(120,120,128,0.1)',color:String(filterRemote)===val?'#fff':'rgba(60,60,67,0.7)',border:'none',borderRadius:50,padding:'5px 12px',fontSize:12,fontWeight:500,cursor:'pointer'}}>{label}</button>
                   ))}
                   <div style={{width:1,height:18,background:'#d6d0c4',margin:'0 2px'}}/>
                   <SortDesc size={12} style={{color:'#7a7469'}}/>
                   <span style={{fontSize:11,color:'#7a7469',fontWeight:600,marginRight:2}}>Sort:</span>
                   {([['rating','Best Fit'],['salary','Salary ↓'],['salaryAsc','Salary ↑'],['recent','Recent']] as [string,string][]).map(([val,label])=>(
-                    <button key={val} onClick={()=>setSortBy(val as 'salary'|'rating')} style={{background:sortBy===val?'#0f0f0f':'transparent',color:sortBy===val?'#f5f2ec':'#7a7469',border:`1px solid ${sortBy===val?'#0f0f0f':'#d6d0c4'}`,borderRadius:3,padding:'4px 10px',fontSize:12,fontWeight:500,cursor:'pointer'}}>{label}</button>
+                    <button key={val} onClick={()=>setSortBy(val as 'salary'|'rating')} style={{background:sortBy===val?'#007AFF':'rgba(120,120,128,0.1)',color:sortBy===val?'#fff':'rgba(60,60,67,0.7)',border:'none',borderRadius:50,padding:'5px 12px',fontSize:12,fontWeight:500,cursor:'pointer'}}>{label}</button>
                   ))}
                   <div style={{marginLeft:'auto'}}>
-                    <button onClick={()=>setShowClearBoard(true)} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 10px',border:'1px solid #d6d0c4',borderRadius:3,background:'transparent',cursor:'pointer',fontSize:12,color:'#7a7469'}}><Trash2 size={11}/>Clear</button>
+                    <button onClick={()=>setShowClearBoard(true)} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 12px',border:'none',borderRadius:50,background:'rgba(255,59,48,0.08)',cursor:'pointer',fontSize:12,color:'#FF3B30'}}><Trash2 size={11}/>Clear</button>
                   </div>
                 </div>
                 {displayJobs.length===0&&jobs.length>0?(
@@ -2132,9 +2133,9 @@ export default function Home() {
                 ):(
                   categoryGroups.map(group=>(
                     <section key={group.cat} style={{marginBottom:32}}>
-                      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:12,borderBottom:'2px solid #0f0f0f',paddingBottom:7}}>
-                        <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:20}}>{group.cat}</h2>
-                        <span style={{fontSize:12,color:'#7a7469'}}>{group.list.length} {group.list.length===1?'role':'roles'}</span>
+                      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:12,paddingBottom:8,borderBottom:'0.5px solid rgba(60,60,67,0.2)'}}>
+                        <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-0.02em',color:'#000'}}>{group.cat}</h2>
+                        <span style={{fontSize:12,color:'rgba(60,60,67,0.5)',fontWeight:500}}>{group.list.length} {group.list.length===1?'role':'roles'}</span>
                       </div>
                       <div style={{display:'grid',gap:10}}>
                         {group.list.map(j=><JobCard key={j.id} job={j} applied={isJobApplied(j.id)} generatingType={generatingJobs[j.id]||null} onGenerate={(job,type)=>setGenerateModal({job,type})} onReturnToExcluded={returnToExcluded}/>)}
@@ -2143,8 +2144,8 @@ export default function Home() {
                   ))
                 )}
                 {excludedJobs.length>0&&(
-                  <div style={{marginTop:36,padding:18,background:'#fff8f6',border:'1px solid #e8bead',borderRadius:4}}>
-                    <h3 style={{fontFamily:'DM Serif Display,serif',fontSize:17,fontWeight:400,marginBottom:12,color:'#6b2200',display:'flex',alignItems:'center',gap:7}}>
+                  <div style={{marginTop:36,padding:18,background:'rgba(255,59,48,0.04)',border:'0.5px solid rgba(255,59,48,0.2)',borderRadius:16}}>
+                    <h3 style={{fontSize:15,fontWeight:700,marginBottom:12,color:'#D70015',display:'flex',alignItems:'center',gap:7,letterSpacing:'-0.01em'}}>
                       <AlertTriangle size={16} fill="#c8460a" color="#c8460a"/>Jobs Excluded After Audit ({excludedJobs.length})
                     </h3>
                     <div style={{overflowX:'auto'}}>
@@ -2181,30 +2182,30 @@ export default function Home() {
           <main className="main-pad" style={{maxWidth:840,margin:'0 auto',padding:'40px 16px 60px'}}>
             <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:26,gap:14,flexWrap:'wrap'}}>
               <div>
-                <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',color:'#c8460a',fontWeight:700,marginBottom:7}}>Application Tracker</div>
-                <h1 style={{fontFamily:'DM Serif Display,serif',fontSize:27,fontWeight:400}}>Applied Jobs</h1>
+                <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'rgba(60,60,67,0.5)',fontWeight:600,marginBottom:6}}>Application Tracker</div>
+                <h1 style={{fontSize:26,fontWeight:700,letterSpacing:'-0.03em',color:'#000'}}>Applied Jobs</h1>
               </div>
-              {appliedJobs.length>0&&<button onClick={()=>{if(confirm('Clear all applied jobs?')){clearAppliedJobs();setAppliedJobs([]);}}} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 13px',background:'transparent',color:'#c8460a',border:'1.5px solid #f5d5c8',borderRadius:4,cursor:'pointer',fontSize:13,fontWeight:600}}><Trash2 size={13}/>Clear All</button>}
+              {appliedJobs.length>0&&<button onClick={()=>{if(confirm('Clear all applied jobs?')){clearAppliedJobs();setAppliedJobs([]);}}} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',background:'rgba(255,59,48,0.08)',color:'#FF3B30',border:'none',borderRadius:50,cursor:'pointer',fontSize:13,fontWeight:600}}><Trash2 size={13}/>Clear All</button>}
             </div>
             {appliedJobs.length===0?(
               <div style={{textAlign:'center',padding:'60px 24px',color:'#7a7469'}}>
                 <CheckSquare size={44} style={{opacity:0.3,marginBottom:14}}/>
-                <h3 style={{fontFamily:'DM Serif Display,serif',fontSize:21,color:'#0f0f0f',marginBottom:8}}>No applications yet</h3>
+                <h3 style={{fontSize:20,fontWeight:700,color:'#000',marginBottom:8,letterSpacing:'-0.02em'}}>No applications yet</h3>
                 <p style={{fontSize:14,lineHeight:1.7,maxWidth:340,margin:'0 auto'}}>Generating any document marks a job as Applied here automatically.</p>
               </div>
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
                 {appliedJobs.map(job=>(
-                  <div key={job.id} style={{background:'#fff',border:'1px solid #d6d0c4',borderRadius:4,padding:'16px 18px'}}>
+                  <div key={job.id} style={{background:'#fff',border:'0.5px solid rgba(60,60,67,0.15)',borderRadius:16,padding:'16px 18px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap'}}>
                       <div style={{flex:1,minWidth:180}}>
-                        <div style={{fontSize:11,letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700,color:'#c8460a',marginBottom:3}}>{job.company}</div>
-                        <div style={{fontFamily:'DM Serif Display,serif',fontSize:16,marginBottom:9}}>{job.title}</div>
+                        <div style={{fontSize:11,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:600,color:'rgba(60,60,67,0.5)',marginBottom:3}}>{job.company}</div>
+                        <div style={{fontSize:16,fontWeight:700,letterSpacing:'-0.01em',marginBottom:9,color:'#000'}}>{job.title}</div>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5,alignItems:'center',marginBottom:9}}>
                           {(job.statusHistory||[]).map((s,i)=>(
                             <div key={i} style={{display:'flex',alignItems:'center',gap:4}}>
                               {i>0&&<ArrowRight size={9} color="#d6d0c4"/>}
-                              <span style={{background:statusBg(s.status),color:statusColor(s.status),fontSize:10,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',padding:'2px 7px',borderRadius:3}}>{s.status}</span>
+                              <span style={{background:statusBg(s.status),color:statusColor(s.status),fontSize:10,fontWeight:700,letterSpacing:'0.03em',textTransform:'uppercase',padding:'3px 8px',borderRadius:50}}>{s.status}</span>
                               <span style={{fontSize:10,color:'#7a7469'}}>{new Date(s.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}{s.note&&` · ${s.note}`}</span>
                             </div>
                           ))}
@@ -2234,50 +2235,50 @@ export default function Home() {
         {tab==='settings'&&(
           <main className="main-pad" style={{maxWidth:800,margin:'0 auto',padding:'40px 16px 60px'}}>
             <div style={{marginBottom:28}}>
-              <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',color:'#c8460a',fontWeight:700,marginBottom:7}}>Configuration</div>
-              <h1 style={{fontFamily:'DM Serif Display,serif',fontSize:27,fontWeight:400}}>Settings</h1>
+              <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'rgba(60,60,67,0.5)',fontWeight:600,marginBottom:6}}>Configuration</div>
+              <h1 style={{fontSize:26,fontWeight:700,letterSpacing:'-0.03em',color:'#000'}}>Settings</h1>
             </div>
 
             {/* Profile summary */}
-            <section style={{background:'#fff',border:'1px solid #d6d0c4',borderRadius:4,padding:22,marginBottom:20}}>
+            <section style={{background:'#fff',border:'0.5px solid rgba(60,60,67,0.15)',borderRadius:16,padding:22,marginBottom:16,boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
-                <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:19,display:'flex',alignItems:'center',gap:7}}><User size={17}/>Candidate Profile</h2>
-                <button onClick={()=>setShowWizard(true)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',background:'#0f0f0f',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontWeight:600,fontSize:13}}><Wand2 size={13}/>Re-run Wizard</button>
+                <h2 style={{fontSize:17,fontWeight:700,letterSpacing:'-0.01em',display:'flex',alignItems:'center',gap:7}}><User size={17}/>Candidate Profile</h2>
+                <button onClick={()=>setShowWizard(true)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',background:'rgba(0,122,255,0.1)',color:'#007AFF',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:13}}><Wand2 size={13}/>Re-run Wizard</button>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10,fontSize:13,color:'#3a3730'}}>
-                <div><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:'#7a7469',display:'block',marginBottom:3}}>Name</span>{profile.name||'—'}</div>
-                <div><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:'#7a7469',display:'block',marginBottom:3}}>Most Recent Role</span>{profile.mostRecentRole||'—'} at {profile.mostRecentEmployer||'—'}</div>
-                <div><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:'#7a7469',display:'block',marginBottom:3}}>Salary Target</span>{fmtSalary(profile.salaryMin)} – {fmtSalary(profile.salaryMax)}</div>
-                <div><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:'#7a7469',display:'block',marginBottom:3}}>Work Preference</span>{profile.workTypes.join(', ')}</div>
-                <div><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:'#7a7469',display:'block',marginBottom:3}}>Links</span>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10,fontSize:13,color:'#000'}}>
+                <div><span style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em',color:'rgba(60,60,67,0.5)',display:'block',marginBottom:3}}>Name</span>{profile.name||'—'}</div>
+                <div><span style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em',color:'rgba(60,60,67,0.5)',display:'block',marginBottom:3}}>Most Recent Role</span>{profile.mostRecentRole||'—'} at {profile.mostRecentEmployer||'—'}</div>
+                <div><span style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em',color:'rgba(60,60,67,0.5)',display:'block',marginBottom:3}}>Salary Target</span>{fmtSalary(profile.salaryMin)} – {fmtSalary(profile.salaryMax)}</div>
+                <div><span style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em',color:'rgba(60,60,67,0.5)',display:'block',marginBottom:3}}>Work Preference</span>{profile.workTypes.join(', ')}</div>
+                <div><span style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em',color:'rgba(60,60,67,0.5)',display:'block',marginBottom:3}}>Links</span>
                   <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                    {profile.linkedinUrl&&<a href={`https://${profile.linkedinUrl}`} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:'#1a4fd8',textDecoration:'none'}}><Link size={10}/>LinkedIn</a>}
-                    {profile.portfolioUrl&&<a href={`https://${profile.portfolioUrl}`} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:'#1a4fd8',textDecoration:'none'}}><Link size={10}/>Portfolio</a>}
-                    {(profile.additionalLinks||[]).map(l=><a key={l.title} href={l.url} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:'#1a4fd8',textDecoration:'none'}}><Link size={10}/>{l.title}</a>)}
+                    {profile.linkedinUrl&&<a href={`https://${profile.linkedinUrl}`} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:'#007AFF',textDecoration:'none'}}><Link size={10}/>LinkedIn</a>}
+                    {profile.portfolioUrl&&<a href={`https://${profile.portfolioUrl}`} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:'#007AFF',textDecoration:'none'}}><Link size={10}/>Portfolio</a>}
+                    {(profile.additionalLinks||[]).map(l=><a key={l.title} href={l.url} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:'#007AFF',textDecoration:'none'}}><Link size={10}/>{l.title}</a>)}
                   </div>
                 </div>
               </div>
             </section>
 
             {/* API Keys */}
-            <section style={{background:'#fff',border:'1px solid #d6d0c4',borderRadius:4,padding:22,marginBottom:20}}>
-              <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:19,marginBottom:5,display:'flex',alignItems:'center',gap:7}}><Settings size={17}/>API Keys</h2>
-              <p style={{fontSize:13,color:'#7a7469',marginBottom:16,lineHeight:1.7}}>
+            <section style={{background:'#fff',border:'0.5px solid rgba(60,60,67,0.15)',borderRadius:16,padding:22,marginBottom:16,boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+              <h2 style={{fontSize:17,fontWeight:700,letterSpacing:'-0.01em',marginBottom:5,display:'flex',alignItems:'center',gap:7}}><Settings size={17}/>API Keys</h2>
+              <p style={{fontSize:13,color:'rgba(60,60,67,0.6)',marginBottom:16,lineHeight:1.7}}>
                 Stored in browser. UI keys override Vercel env vars.&nbsp;
-                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{color:'#1a4fd8'}}>Get Anthropic key ↗</a>&nbsp;·&nbsp;
-                <a href="https://serper.dev/api-key" target="_blank" rel="noreferrer" style={{color:'#1a4fd8'}}>Get Serper key ↗</a>
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{color:'#007AFF'}}>Get Anthropic key ↗</a>&nbsp;·&nbsp;
+                <a href="https://serper.dev/api-key" target="_blank" rel="noreferrer" style={{color:'#007AFF'}}>Get Serper key ↗</a>
               </p>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:14}}>
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.15em',textTransform:'uppercase',color:'#7a7469',marginBottom:5}}>Anthropic API Key</div>
-                  <input type="password" value={anthropicKey} onChange={e=>setAnthropicKey(e.target.value)} placeholder="sk-ant-..." style={{width:'100%',padding:'8px 11px',border:'1.5px solid #d6d0c4',borderRadius:4,fontFamily:'DM Sans,sans-serif',fontSize:13,outline:'none'}}/>
+                  <div style={{fontSize:11,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'rgba(60,60,67,0.5)',marginBottom:5}}>Anthropic API Key</div>
+                  <input type="password" value={anthropicKey} onChange={e=>setAnthropicKey(e.target.value)} placeholder="sk-ant-..." style={{width:'100%'}}/>
                 </div>
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.15em',textTransform:'uppercase',color:'#7a7469',marginBottom:5}}>Serper API Key</div>
-                  <input type="password" value={serperKey} onChange={e=>setSerperKey(e.target.value)} placeholder="Serper key..." style={{width:'100%',padding:'8px 11px',border:'1.5px solid #d6d0c4',borderRadius:4,fontFamily:'DM Sans,sans-serif',fontSize:13,outline:'none'}}/>
+                  <div style={{fontSize:11,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'rgba(60,60,67,0.5)',marginBottom:5}}>Serper API Key</div>
+                  <input type="password" value={serperKey} onChange={e=>setSerperKey(e.target.value)} placeholder="Serper key..." style={{width:'100%'}}/>
                 </div>
               </div>
-              <button onClick={()=>{setLocalApiKey(anthropicKey);setLocalSerperKey(serperKey);setKeysSaved(true);setTimeout(()=>setKeysSaved(false),2000);}} style={{display:'flex',alignItems:'center',gap:5,padding:'8px 16px',background:'#0f0f0f',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontWeight:600,fontSize:13}}>
+              <button onClick={()=>{setLocalApiKey(anthropicKey);setLocalSerperKey(serperKey);setKeysSaved(true);setTimeout(()=>setKeysSaved(false),2000);}} style={{display:'flex',alignItems:'center',gap:5,padding:'8px 18px',background:'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:13}}>
                 {keysSaved?<><CheckCircle size={13} fill="#fff"/>Saved</>:<><CheckSquare size={13}/>Save Keys</>}
               </button>
             </section>
@@ -2291,31 +2292,31 @@ export default function Home() {
               const value=key==='jobSearch'?jobSearchInstr:key==='resume'?resumeInstr:coverInstr;
               const setter=key==='jobSearch'?setJobSearchInstr:key==='resume'?setResumeInstr:setCoverInstr;
               return (
-                <section key={key} style={{background:'#fff',border:'1px solid #d6d0c4',borderRadius:4,padding:22,marginBottom:16}}>
+                <section key={key} style={{background:'#fff',border:'0.5px solid rgba(60,60,67,0.15)',borderRadius:16,padding:22,marginBottom:16,boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
-                    <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:18,display:'flex',alignItems:'center',gap:7}}>{icon}{label}</h2>
+                    <h2 style={{fontSize:16,fontWeight:700,letterSpacing:'-0.01em',display:'flex',alignItems:'center',gap:7}}>{icon}{label}</h2>
                     <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-                      <button onClick={()=>setResetInstrTarget(key)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 11px',background:'transparent',color:'#c8460a',border:'1.5px solid #f5d5c8',borderRadius:4,cursor:'pointer',fontSize:12,fontWeight:600}}><RotateCcw size={12}/>Reset</button>
-                      <button onClick={()=>copyInstrs(key)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 11px',border:'1.5px solid #d6d0c4',borderRadius:4,background:'transparent',cursor:'pointer',fontSize:12,fontWeight:600}}>
+                      <button onClick={()=>setResetInstrTarget(key)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'rgba(255,59,48,0.08)',color:'#FF3B30',border:'none',borderRadius:50,cursor:'pointer',fontSize:12,fontWeight:600}}><RotateCcw size={12}/>Reset</button>
+                      <button onClick={()=>copyInstrs(key)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',border:'none',borderRadius:50,background:'rgba(120,120,128,0.1)',cursor:'pointer',fontSize:12,fontWeight:600}}>
                         {copied===key?<><CheckCircle size={12}/>Copied!</>:<><Copy size={12}/>Copy</>}
                       </button>
-                      <button onClick={()=>saveInstrs(key)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#0f0f0f',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                      <button onClick={()=>saveInstrs(key)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 14px',background:'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:'pointer',fontSize:12,fontWeight:600}}>
                         {instrSaved===key?<><CheckCircle size={12} fill="#fff"/>Saved</>:<><CheckSquare size={12}/>Save</>}
                       </button>
                     </div>
                   </div>
                   <textarea value={value} onChange={e=>setter(e.target.value)} rows={10}
-                    style={{width:'100%',padding:'9px 11px',border:'1.5px solid #d6d0c4',borderRadius:4,fontFamily:'monospace',fontSize:12,resize:'vertical',outline:'none'}}/>
-                  <p style={{fontSize:11,color:'#7a7469',marginTop:5}}>Save writes to localStorage. "Copy" copies to clipboard for manual repo update.</p>
+                    style={{width:'100%',fontFamily:'ui-monospace,monospace',fontSize:12}}/>
+                  <p style={{fontSize:11,color:'rgba(60,60,67,0.45)',marginTop:6}}>Save writes to localStorage. "Copy" copies to clipboard for manual repo update.</p>
                 </section>
               );
             })}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginTop:8}}>
-              <button onClick={()=>setShowSaveImport(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 18px',background:'#0f0f0f',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontWeight:700,fontSize:13}}>
+              <button onClick={()=>setShowSaveImport(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 20px',background:'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:13}}>
                 <Upload size={14}/>Save / Import Job Board
               </button>
-              <button onClick={()=>{const p=getSavedProfile()||DEFAULT_PROFILE;const js=buildJobSearchInstructions(p);const res=buildResumeInstructions(p);const cv=buildCoverLetterInstructions(p);setJobSearchInstr(js);setResumeInstr(res);setCoverInstr(cv);saveInstructions({jobSearch:js,resume:res,coverLetter:cv});}} style={{display:'flex',alignItems:'center',gap:5,padding:'9px 14px',background:'transparent',color:'#c8460a',border:'1.5px solid #f5d5c8',borderRadius:4,cursor:'pointer',fontSize:13,fontWeight:600}}>
-                <RotateCcw size={13}/>Reset Instructions to Defaults
+              <button onClick={()=>{const p=getSavedProfile()||DEFAULT_PROFILE;const js=buildJobSearchInstructions(p);const res=buildResumeInstructions(p);const cv=buildCoverLetterInstructions(p);setJobSearchInstr(js);setResumeInstr(res);setCoverInstr(cv);saveInstructions({jobSearch:js,resume:res,coverLetter:cv});}} style={{display:'flex',alignItems:'center',gap:5,padding:'9px 16px',background:'rgba(255,59,48,0.08)',color:'#FF3B30',border:'none',borderRadius:50,cursor:'pointer',fontSize:13,fontWeight:600}}>
+                <RotateCcw size={13}/>Reset Instructions
               </button>
             </div>
           </main>
@@ -2323,7 +2324,7 @@ export default function Home() {
       </div>
 
       {/* STICKY FOOTER */}
-      <footer style={{background:'#0f0f0f',color:'#7a7469',textAlign:'center',padding:'14px 20px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',gap:6,position:'sticky',bottom:0,zIndex:100,flexShrink:0,flexWrap:'wrap'}}>
+      <footer style={{background:'rgba(242,242,247,0.85)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderTop:'0.5px solid rgba(60,60,67,0.18)',color:'rgba(60,60,67,0.5)',textAlign:'center',padding:'10px 20px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',gap:6,position:'sticky',bottom:0,zIndex:100,flexShrink:0,flexWrap:'wrap'}}>
         <Copyright size={11}/>
         <span>{new Date().getFullYear()} Ape X LLC</span>
         <span>·</span>
