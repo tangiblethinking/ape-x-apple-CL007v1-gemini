@@ -57,7 +57,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } = req.body;
 
   const provider: AIProvider = aiProvider || 'claude';
-  const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  const envKey = provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  const apiKey = apiKeyOverride || envKey;
   const serperKey = serperKeyOverride || process.env.SERPER_API_KEY;
 
   if (!apiKey) return res.status(400).json({ error: 'No API key configured. Add it in Settings.' });

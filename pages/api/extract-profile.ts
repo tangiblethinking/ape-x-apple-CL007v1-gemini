@@ -6,7 +6,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { resumeText, apiKeyOverride, aiProvider } = req.body;
   const provider: AIProvider = aiProvider || 'claude';
-  const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  const envKey = provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  const apiKey = apiKeyOverride || envKey;
 
   if (!apiKey) return res.status(400).json({ error: 'No API key configured.' });
   if (!resumeText) return res.status(400).json({ error: 'No resume text provided.' });

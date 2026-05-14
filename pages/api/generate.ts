@@ -9,7 +9,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { type, jobData, jobDescription, instructions, apiKeyOverride, uploadedTemplate, aiProvider } = req.body;
   const provider: AIProvider = aiProvider || 'claude';
 
-  const anthropicKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  const envKey = provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  const anthropicKey = apiKeyOverride || envKey;
   if (!anthropicKey) return res.status(400).json({ error: 'No API key configured.' });
 
   // Prefer user-uploaded template from localStorage (passed in request body)

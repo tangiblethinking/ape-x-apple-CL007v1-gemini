@@ -110,9 +110,10 @@ function extractCompanyFromSnippet(title: string, snippet: string, domain: strin
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { instructions, specialInstructions, apiKeyOverride, serperKeyOverride } = req.body;
+  const { instructions, specialInstructions, apiKeyOverride, serperKeyOverride, aiProvider } = req.body;
 
-  const aiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  const envKey = aiProvider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  const aiKey = apiKeyOverride || envKey;
   const serperKey = serperKeyOverride || process.env.SERPER_API_KEY;
 
   if (!aiKey) return res.status(400).json({ error: 'No API key configured. Add it in Settings.' });

@@ -54,6 +54,86 @@ async function callClaudeAPI(
   }
 }
 
+// ── Gemini Model Resolution ─────────────────────────────────
+// Cache resolved model per API key (module-level, lives for server instance lifetime)
+const geminiModelCache = new Map<string, string>();
+
+// Preferred models in priority order. First one that ListModels says supports
+// generateContent wins. If ListModels fails, we fall back to GEMINI_FALLBACK_MODEL.
+const GEMINI_PREFERRED_MODELS = [
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-flash-latest',
+  'gemini-pro-latest',
+];
+const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
+
+interface GeminiModelInfo {
+  name: string; // e.g. "models/gemini-2.5-pro"
+  supportedGenerationMethods?: string[];
+}
+
+interface ResolveResult {
+  model: string;
+  error?: string;
+}
+
+async function resolveGeminiModel(apiKey: string): Promise<ResolveResult> {
+  // 1. Cache hit
+  const cached = geminiModelCache.get(apiKey);
+  if (cached) return { model: cached };
+
+  // 2. Call ListModels
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+      { method: 'GET' }
+    );
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const errMsg = errBody.error?.message || `ListModels HTTP ${res.status}`;
+      // Use fallback but surface the error so caller can decide
+      geminiModelCache.set(apiKey, GEMINI_FALLBACK_MODEL);
+      return { model: GEMINI_FALLBACK_MODEL, error: `Model discovery failed: ${errMsg}. Using fallback ${GEMINI_FALLBACK_MODEL}.` };
+    }
+
+    const data = await res.json();
+    const models: GeminiModelInfo[] = data.models || [];
+
+    // Filter to models that support generateContent
+    const capable = models.filter(m =>
+      (m.supportedGenerationMethods || []).includes('generateContent')
+    );
+
+    if (capable.length === 0) {
+      geminiModelCache.set(apiKey, GEMINI_FALLBACK_MODEL);
+      return { model: GEMINI_FALLBACK_MODEL, error: `No Gemini models support generateContent for this key. Using fallback.` };
+    }
+
+    // Strip "models/" prefix from names for comparison
+    const capableNames = capable.map(m => m.name.replace(/^models\//, ''));
+
+    // Find first preferred model that is available
+    for (const preferred of GEMINI_PREFERRED_MODELS) {
+      if (capableNames.includes(preferred)) {
+        geminiModelCache.set(apiKey, preferred);
+        return { model: preferred };
+      }
+    }
+
+    // No preferred match — take first available capable model
+    const firstAvailable = capableNames[0];
+    geminiModelCache.set(apiKey, firstAvailable);
+    return { model: firstAvailable };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown ListModels error';
+    geminiModelCache.set(apiKey, GEMINI_FALLBACK_MODEL);
+    return { model: GEMINI_FALLBACK_MODEL, error: `ListModels exception: ${msg}. Using fallback.` };
+  }
+}
+
 // ── Gemini API ──────────────────────────────────────────────
 async function callGeminiAPI(
   apiKey: string,
@@ -62,6 +142,9 @@ async function callGeminiAPI(
   maxTokens = 16000
 ): Promise<AIResponse> {
   try {
+    // Resolve which model to use (cached after first call)
+    const { model, error: resolveError } = await resolveGeminiModel(apiKey);
+
     const contents = messages.map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }],
@@ -83,7 +166,7 @@ async function callGeminiAPI(
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,9 +175,14 @@ async function callGeminiAPI(
     );
 
     if (!response.ok) {
-      const err = await response.json();
-      const msg = err.error?.message || `Gemini API error (${response.status})`;
-      return { text: '', error: msg };
+      const err = await response.json().catch(() => ({}));
+      const apiMsg = err.error?.message || `Gemini API error (${response.status})`;
+      // If the chosen model 404s, invalidate cache so next call re-resolves
+      if (response.status === 404) {
+        geminiModelCache.delete(apiKey);
+      }
+      const combined = resolveError ? `${apiMsg} | ${resolveError}` : `${apiMsg} (model: ${model})`;
+      return { text: '', error: combined };
     }
 
     const data = await response.json();
@@ -102,7 +190,7 @@ async function callGeminiAPI(
     // Check for safety blocks or empty candidates
     const candidate = data.candidates?.[0];
     if (!candidate) {
-      return { text: '', error: 'Gemini returned no candidates — check API key or try again' };
+      return { text: '', error: `Gemini returned no candidates (model: ${model}) — check API key or try again` };
     }
     if (candidate.finishReason === 'SAFETY') {
       return { text: '', error: 'Gemini blocked response due to safety filters' };
@@ -110,7 +198,7 @@ async function callGeminiAPI(
 
     const text = candidate.content?.parts?.[0]?.text || '';
     if (!text) {
-      return { text: '', error: 'Empty response from Gemini' };
+      return { text: '', error: `Empty response from Gemini (model: ${model})` };
     }
     return { text };
   } catch (err: unknown) {
