@@ -1,11 +1,4 @@
-// ============================================================
-// AI PROVIDER ABSTRACTION LAYER
-// ============================================================
-// Supports both Claude (Anthropic) and Gemini (Google) APIs
-
 import type { AIProvider } from './storage';
-
-// Re-export AIProvider type for convenience
 export type { AIProvider };
 
 export interface AIMessage {
@@ -55,12 +48,8 @@ async function callClaudeAPI(
 }
 
 // ── Gemini Model Resolution ─────────────────────────────────
-// Cache resolved model per API key (module-level, lives for server instance lifetime)
 const geminiModelCache = new Map<string, string>();
 
-// Preferred models in priority order. Flash variants first because they have
-// far higher free-tier quotas (Pro is heavily rate-limited or gated on free tier).
-// Pro is only reached on paid tiers or as last resort.
 const GEMINI_PREFERRED_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
@@ -72,7 +61,7 @@ const GEMINI_PREFERRED_MODELS = [
 const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
 
 interface GeminiModelInfo {
-  name: string; // e.g. "models/gemini-2.5-pro"
+  name: string;
   supportedGenerationMethods?: string[];
 }
 
@@ -82,11 +71,9 @@ interface ResolveResult {
 }
 
 async function resolveGeminiModel(apiKey: string, excludeModels: string[] = []): Promise<ResolveResult> {
-  // 1. Cache hit (skip if cached model is in exclusion list)
   const cached = geminiModelCache.get(apiKey);
   if (cached && !excludeModels.includes(cached)) return { model: cached };
 
-  // 2. Call ListModels
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
@@ -96,7 +83,6 @@ async function resolveGeminiModel(apiKey: string, excludeModels: string[] = []):
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
       const errMsg = errBody.error?.message || `ListModels HTTP ${res.status}`;
-      // Use fallback but surface the error so caller can decide
       const fallback = excludeModels.includes(GEMINI_FALLBACK_MODEL) ? 'gemini-2.5-flash-lite' : GEMINI_FALLBACK_MODEL;
       geminiModelCache.set(apiKey, fallback);
       return { model: fallback, error: `Model discovery failed: ${errMsg}. Using fallback ${fallback}.` };
@@ -105,20 +91,17 @@ async function resolveGeminiModel(apiKey: string, excludeModels: string[] = []):
     const data = await res.json();
     const models: GeminiModelInfo[] = data.models || [];
 
-    // Filter to models that support generateContent
     const capable = models.filter(m =>
       (m.supportedGenerationMethods || []).includes('generateContent')
     );
 
     if (capable.length === 0) {
       geminiModelCache.set(apiKey, GEMINI_FALLBACK_MODEL);
-      return { model: GEMINI_FALLBACK_MODEL, error: `No Gemini models support generateContent for this key. Using fallback.` };
+      return { model: GEMINI_FALLBACK_MODEL, error: `No Gemini models support generateContent. Using fallback.` };
     }
 
-    // Strip "models/" prefix from names for comparison
     const capableNames = capable.map(m => m.name.replace(/^models\//, ''));
 
-    // Find first preferred model that is available AND not excluded
     for (const preferred of GEMINI_PREFERRED_MODELS) {
       if (capableNames.includes(preferred) && !excludeModels.includes(preferred)) {
         geminiModelCache.set(apiKey, preferred);
@@ -126,10 +109,9 @@ async function resolveGeminiModel(apiKey: string, excludeModels: string[] = []):
       }
     }
 
-    // No preferred match — take first available non-excluded capable model
     const firstAvailable = capableNames.find(n => !excludeModels.includes(n));
     if (!firstAvailable) {
-      return { model: '', error: `All available Gemini models have been tried and failed (excluded: ${excludeModels.join(', ')})` };
+      return { model: '', error: `All Gemini models exhausted (excluded: ${excludeModels.join(', ')})` };
     }
     geminiModelCache.set(apiKey, firstAvailable);
     return { model: firstAvailable };
@@ -140,6 +122,39 @@ async function resolveGeminiModel(apiKey: string, excludeModels: string[] = []):
   }
 }
 
+// Strict matching schema configuration for structured profile extraction
+const GEMINI_JSON_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    name: { type: 'STRING' },
+    email: { type: 'STRING' },
+    skills: { type: 'ARRAY', items: { type: 'STRING' } },
+    phone: { type: 'STRING' },
+    linkedinUrl: { type: 'STRING' },
+    portfolioUrl: { type: 'STRING' },
+    additionalLinks: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          url: { type: 'STRING' }
+        }
+      }
+    },
+    mostRecentRole: { type: 'STRING' },
+    mostRecentEmployer: { type: 'STRING' },
+    yearsExperience: { type: 'STRING' },
+    coreStrengths: { type: 'STRING' },
+    discipline: { type: 'STRING' },
+    targetTitles: { type: 'ARRAY', items: { type: 'STRING' } },
+    targetSectors: { type: 'ARRAY', items: { type: 'STRING' } },
+    salaryMin: { type: 'NUMBER' },
+    salaryMax: { type: 'NUMBER' }
+  },
+  required: ['name', 'email', 'skills']
+};
+
 // ── Gemini API ──────────────────────────────────────────────
 async function callGeminiAPI(
   apiKey: string,
@@ -147,13 +162,11 @@ async function callGeminiAPI(
   systemPrompt?: string,
   maxTokens = 16000
 ): Promise<AIResponse> {
-  // Try up to N times, excluding models that hit quota errors
   const triedModels: string[] = [];
   const maxAttempts = 3;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      // Resolve which model to use (cached after first call, retries skip exhausted models)
       const { model, error: resolveError } = await resolveGeminiModel(apiKey, triedModels);
 
       if (!model) {
@@ -165,21 +178,19 @@ async function callGeminiAPI(
         parts: [{ text: msg.content }],
       }));
 
+      const isJsonTask = systemPrompt && /JSON|json object/i.test(systemPrompt);
       const body: Record<string, unknown> = {
         contents,
         generationConfig: {
           maxOutputTokens: maxTokens,
-          temperature: 0.2, // Low temp for reliable JSON output
+          temperature: 0.2,
+          ...(isJsonTask && {
+            responseMimeType: 'application/json',
+            responseSchema: GEMINI_JSON_SCHEMA
+          })
         },
       };
 
-      // Auto-detect JSON extraction tasks from system prompt
-      // When prompt asks for JSON output, force Gemini to return valid JSON
-      if (systemPrompt && /JSON|json object/i.test(systemPrompt)) {
-        (body.generationConfig as Record<string, unknown>).response_mime_type = 'application/json';
-      }
-
-      // Use Gemini's native systemInstruction field — far more reliable than injecting into messages
       if (systemPrompt) {
         body.systemInstruction = {
           parts: [{ text: systemPrompt }],
@@ -200,26 +211,22 @@ async function callGeminiAPI(
         const apiMsg = err.error?.message || `Gemini API error (${response.status})`;
         const status = err.error?.status || '';
 
-        // Detect quota / rate limit errors — retry with next model
         const isQuotaError = response.status === 429
           || status === 'RESOURCE_EXHAUSTED'
           || /quota|rate limit|exceeded/i.test(apiMsg);
 
         if (isQuotaError && attempt < maxAttempts - 1) {
-          // Mark this model as exhausted, invalidate cache, try next
           triedModels.push(model);
           geminiModelCache.delete(apiKey);
           continue;
         }
 
-        // Model not found — also retry with next model
         if (response.status === 404 && attempt < maxAttempts - 1) {
           triedModels.push(model);
           geminiModelCache.delete(apiKey);
           continue;
         }
 
-        // Out of retries or non-retryable error
         const triedNote = triedModels.length > 0 ? ` (tried: ${triedModels.join(', ')})` : '';
         const combined = resolveError
           ? `${apiMsg} | ${resolveError}${triedNote}`
@@ -228,12 +235,11 @@ async function callGeminiAPI(
       }
 
       const data = await response.json();
-
-      // Check for safety blocks or empty candidates
       const candidate = data.candidates?.[0];
       if (!candidate) {
-        return { text: '', error: `Gemini returned no candidates (model: ${model}) — check API key or try again` };
+        return { text: '', error: `Gemini returned no candidates (model: ${model})` };
       }
+
       if (candidate.finishReason === 'SAFETY') {
         return { text: '', error: 'Gemini blocked response due to safety filters' };
       }
@@ -242,29 +248,14 @@ async function callGeminiAPI(
       if (!text) {
         return { text: '', error: `Empty response from Gemini (model: ${model})` };
       }
+
       return { text };
     } catch (err: unknown) {
-      // Network/parse error — don't retry, just return
       return { text: '', error: err instanceof Error ? err.message : 'Unknown Gemini error' };
     }
   }
 
   return { text: '', error: `All Gemini models exhausted after ${maxAttempts} attempts (tried: ${triedModels.join(', ')})` };
-}
-
-// ── Unified API Call ────────────────────────────────────────
-export async function callAI(
-  provider: AIProvider,
-  apiKey: string,
-  messages: AIMessage[],
-  systemPrompt?: string,
-  maxTokens = 16000
-): Promise<AIResponse> {
-  if (provider === 'claude') {
-    return callClaudeAPI(apiKey, messages, systemPrompt, maxTokens);
-  } else {
-    return callGeminiAPI(apiKey, messages, systemPrompt, maxTokens);
-  }
 }
 
 // ── Gemini File Search (RAG) ────────────────────────────────
@@ -286,23 +277,19 @@ async function callGeminiWithFileSearch(
         return { text: '', error: resolveError || 'No Gemini model available' };
       }
 
-      // Normalize fileId to "files/ID" format
       const normalizedFileId = fileId.startsWith('files/') ? fileId : `files/${fileId}`;
 
-      // CORRECTED PAYLOAD: Remove unsupported tools block, use direct file_uri string
+      // FIX: Casing changes to camelCase structures required by REST API endpoints
       const body: Record<string, unknown> = {
         contents: [
           {
             role: 'user',
             parts: [
+              { text: query },
               {
-                text: query,
-              },
-              {
-                file_data: {
-                  // Use direct resource identifier format, not full URL
-                  file_uri: normalizedFileId,
-                  mime_type: 'application/pdf',
+                fileData: {
+                  fileUri: `https://generativelanguage.googleapis.com/v1beta/${normalizedFileId}`,
+                  mimeType: 'application/pdf',
                 },
               },
             ],
@@ -311,7 +298,8 @@ async function callGeminiWithFileSearch(
         generationConfig: {
           maxOutputTokens: maxTokens,
           temperature: 0.2,
-          response_mime_type: 'application/json', // Force JSON output at API level
+          responseMimeType: 'application/json',
+          responseSchema: GEMINI_JSON_SCHEMA
         },
       };
 
@@ -360,10 +348,7 @@ async function callGeminiWithFileSearch(
       const candidate = data.candidates?.[0];
 
       if (!candidate) {
-        return {
-          text: '',
-          error: `Gemini File Search returned no candidates (model: ${model})`,
-        };
+        return { text: '', error: `Gemini File Search returned no candidates (model: ${model})` };
       }
 
       if (candidate.finishReason === 'SAFETY') {
@@ -377,20 +362,29 @@ async function callGeminiWithFileSearch(
 
       return { text };
     } catch (err: unknown) {
-      return {
-        text: '',
-        error: err instanceof Error ? err.message : 'Unknown Gemini File Search error',
-      };
+      return { text: '', error: err instanceof Error ? err.message : 'Unknown Gemini File Search error' };
     }
   }
 
-  return {
-    text: '',
-    error: `All Gemini models exhausted after ${maxAttempts} attempts (tried: ${triedModels.join(', ')})`,
-  };
+  return { text: '', error: `All Gemini models exhausted after ${maxAttempts} attempts` };
 }
 
-// ── Unified API Call - File Search ──────────────────────────
+// ── Unified API Call ────────────────────────────────────────
+export async function callAI(
+  provider: AIProvider,
+  apiKey: string,
+  messages: AIMessage[],
+  systemPrompt?: string,
+  maxTokens = 16000
+): Promise<AIResponse> {
+  if (provider === 'claude') {
+    return callClaudeAPI(apiKey, messages, systemPrompt, maxTokens);
+  } else {
+    return callGeminiAPI(apiKey, messages, systemPrompt, maxTokens);
+  }
+}
+
+// ── File Search API Call ────────────────────────────────────
 export async function callAIWithFileSearch(
   provider: AIProvider,
   apiKey: string,
@@ -406,19 +400,13 @@ export async function callAIWithFileSearch(
   }
 }
 
-
-// Robustly extracts JSON from a response that may contain markdown fences,
-// explanatory text, or other noise. Tries multiple strategies in order.
+// ── JSON Extraction Helper ──────────────────────────────────
 export function extractJSON(raw: string): string {
   if (!raw) return '{}';
-
-  // 1. Strip markdown code fences
   let cleaned = raw.replace(/^```json\s*/im, '').replace(/^```\s*/im, '').replace(/```\s*$/im, '').trim();
 
-  // 2. Try direct parse first
   try { JSON.parse(cleaned); return cleaned; } catch { /* continue */ }
 
-  // 3. Find first { ... } block (handles leading/trailing prose)
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
   if (start !== -1 && end !== -1 && end > start) {
@@ -426,7 +414,6 @@ export function extractJSON(raw: string): string {
     try { JSON.parse(candidate); return candidate; } catch { /* continue */ }
   }
 
-  // 4. Find first [ ... ] block (array responses)
   const aStart = cleaned.indexOf('[');
   const aEnd = cleaned.lastIndexOf(']');
   if (aStart !== -1 && aEnd !== -1 && aEnd > aStart) {
@@ -442,7 +429,6 @@ export function validateAPIKey(provider: AIProvider, key: string): boolean {
   if (provider === 'claude') {
     return key.startsWith('sk-ant-') && key.length > 20;
   } else {
-    // Gemini keys start with "AIza" and are typically 39 characters
     return key.startsWith('AIza') && key.length > 30;
   }
 }
@@ -464,9 +450,7 @@ export function getProviderName(provider: AIProvider): string {
 }
 
 export function getProviderSetupURL(provider: AIProvider): string {
-  return provider === 'claude' 
-    ? 'https://console.anthropic.com/settings/keys'
-    : 'https://aistudio.google.com/app/apikey';
+  return provider === 'claude' ? 'https://console.anthropic.com/settings/keys' : 'https://aistudio.google.com/app/apikey';
 }
 
 export function getProviderSetupSteps(provider: AIProvider): string[] {
