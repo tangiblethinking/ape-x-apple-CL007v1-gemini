@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { callAI, extractJSON, AIProvider } from '../../lib/ai-providers';
+import { getClaudeAnalyzeJobPrompt } from '../../lib/claude-instructions';
+import { getGeminiAnalyzeJobPrompt } from '../../lib/gemini-instructions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -29,32 +31,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const profileStr = candidateProfile ? JSON.stringify(candidateProfile) : '{}';
   const hasContent = jobContent.length > 100;
 
-  const systemPrompt = `You are a recruiter analyst. Generate a complete job card analysis for the role described.
-The candidate profile is: ${profileStr}
-
-Return ONLY a valid JSON object with exactly these fields — no markdown, no explanation:
-{
-  "category": "senior-director|director|manager",
-  "isRemote": true,
-  "isHybrid": false,
-  "isOnsite": false,
-  "location": "City, ST or empty string for remote",
-  "industry": ["ecom|saas|fintech|health|nonprofit|proptech"],
-  "salaryMin": 120000,
-  "salaryMax": 180000,
-  "salaryDisplay": "$120K–$180K",
-  "salaryNote": "Estimated",
-  "rating": 7,
-  "roleSummary": "2-3 sentence summary",
-  "whyYouFit": ["bullet 1", "bullet 2", "bullet 3"],
-  "requirements": ["req 1", "req 2", "req 3"],
-  "companyInfo": "2-3 sentences about company",
-  "goldFlags": ["positive signal"],
-  "redFlags": ["concern"]
-}
-
-Rating: 9-10 near-perfect, 7-8 strong, 5-6 solid, below 5 = rate as 5.
-Return ONLY the JSON object. No markdown. No explanation.`;
+  const systemPrompt = provider === 'gemini'
+    ? getGeminiAnalyzeJobPrompt(profileStr)
+    : getClaudeAnalyzeJobPrompt(profileStr);
 
   try {
     const aiResponse = await callAI(

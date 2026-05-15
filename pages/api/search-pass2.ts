@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { callAI, extractJSON, AIProvider } from '../../lib/ai-providers';
+import { getClaudeSearchPrompt } from '../../lib/claude-instructions';
+import { getGeminiSearchPrompt } from '../../lib/gemini-instructions';
 
 interface TrustedResult {
   title: string;
@@ -111,22 +113,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const finalInstructions = specialInstructions
     ? `${instructions}\n\nSPECIAL:\n${specialInstructions}` : instructions;
 
-  const systemPrompt = `${finalInstructions}
-
-TODAY:${today} TITLES:${(titlesSearched || []).join(',')}
-
-Build job cards from verified search results. Return ONLY a compact JSON array (no whitespace, no markdown, no explanation).
-
-Each active job object:
-{"id":"slug","company":"Co","title":"Title","category":"seniority","isRemote":true,"isHybrid":false,"isOnsite":false,"location":"City ST","industry":["sector"],"salaryMin":0,"salaryMax":0,"salaryDisplay":"$0 — Not Listed","salaryNote":"Not Listed","rating":7,"auditLabel":"✓ Direct ATS Verified ${today}","roleSummary":"2-3 sentences","whyYouFit":["bullet"],"requirements":["req"],"companyInfo":"2-3 sentences","goldFlags":["flag"],"redFlags":["flag"],"applyUrl":"url","careersUrl":"url","aboutUrl":"url","jobDescUrl":"url","postedDate":"YYYY-MM-DD","excluded":false}
-
-Excluded job object:
-{"id":"slug","company":"Co","title":"Title","layerFailed":"Layer 3","reason":"reason","excluded":true}
-
-auditLabel: use "✓ Direct ATS Verified" for [ATS], "✓ Company Domain Verified" for [AGG-V], "✓ Aggregator Listed" for [AGG-U] — append date.
-Rating: 9-10=near-perfect, 7-8=strong with gap, 5-6=solid fundamentals, below 5=exclude.
-LOCATION: parse any format. CATEGORY: use actual seniority from role title.
-Return ONLY the JSON array. No explanation. No markdown.`;
+  const systemPrompt = provider === 'gemini'
+    ? getGeminiSearchPrompt(instructions, specialInstructions || null, titlesSearched || [], today)
+    : getClaudeSearchPrompt(instructions, specialInstructions || null, titlesSearched || [], today);
 
   try {
     const aiResponse = await callAI(

@@ -1758,6 +1758,7 @@ export default function Home() {
       if(abortRef.current) return;
       const data2=await safeJson(res2);
       if(!res2.ok){setSearchError((data2.error as string)||'Search failed in Pass 2.');setSearching(false);return;}
+      if(data2.error){setSearchError((data2.error as string)||'Search failed in Pass 2.');setSearching(false);return;}
 
       const allJobs=Array.isArray(data2.jobs)?data2.jobs as (SavedJob|ExcludedJob)[]:[];
       const live=allJobs.filter((j:SavedJob|ExcludedJob)=>!j.excluded) as SavedJob[];

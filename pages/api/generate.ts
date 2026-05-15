@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
 import { callAI, AIProvider } from '../../lib/ai-providers';
+import { getClaudeGeneratePrompt } from '../../lib/claude-instructions';
+import { getGeminiGeneratePrompt } from '../../lib/gemini-instructions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -37,20 +39,9 @@ Key Details: ${jobData.whyYouFit?.join(', ')}
 Apply URL: ${jobData.applyUrl}
   `.trim();
 
-  const systemPrompt = `${instructions}
-
-You are generating a tailored ${type === 'resume' ? 'resume' : 'cover letter'} HTML file.
-
-CRITICAL RULES:
-1. Return ONLY the complete, valid HTML document — nothing else
-2. Do NOT include markdown code fences, explanations, or any text outside the HTML
-3. Preserve 100% of the HTML structure, CSS styles, classes, and inline SVG icons
-4. Only change TEXT CONTENT within existing HTML elements
-5. Do not add or remove any HTML elements, classes, or attributes
-6. Do not truncate — return the entire document
-7. The output must be a complete, standalone HTML file that renders identically to the template in layout
-
-The HTML template is provided. Update only the text content to be tailored for this specific job application.`;
+  const systemPrompt = provider === 'gemini'
+    ? getGeminiGeneratePrompt(type, instructions)
+    : getClaudeGeneratePrompt(type, instructions);
 
   const userMessage = `
 COMPANY: ${jobData.company}
