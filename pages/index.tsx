@@ -17,6 +17,8 @@ import {
   setLastSearchQuery,
   setUploadedResume, getUploadedResume, getUploadedResumeMeta,
   setUploadedCover, getUploadedCover, getUploadedCoverMeta,
+  setUploadedResumeFileData, getUploadedResumeFileData,
+  setUploadedCoverFileData, getUploadedCoverFileData,
   clearAllStorage, getSavedProfile, saveProfile,
   getSearchHistory, saveSearchToHistory, deleteSearchFromHistory, deleteOldestSearch,
   isHistoryFull, getHistoryCount, SearchSnapshot, ExcludedJobSnapshot,
@@ -112,6 +114,15 @@ async function parseFile(file: File): Promise<string> {
     return text;
   }
   throw new Error('Unsupported file type. Use HTML, DOCX, or text-based PDF.');
+}
+
+async function fileToDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read file as data URI'));
+    reader.readAsDataURL(file);
+  });
 }
 
 // ── Loading Overlay ────────────────────────────────────────────────────────
@@ -345,10 +356,12 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
     setUploading(true);
     try{
       const text=await parseFile(file);
+      const dataUri=await fileToDataUri(file);
       resumeTextRef.current=text;
       const ext=file.name.split('.').pop()?.toLowerCase() as UploadMeta['fileType'];
       const meta={filename:file.name,uploadedAt:new Date().toISOString(),fileType:ext};
       setUploadedResume(text,meta);
+      setUploadedResumeFileData(dataUri);
       setWizResumeMeta(meta);
       setUploadMsg('✓ Resume ready');
     }catch(e:unknown){setUploadMsg(e instanceof Error?e.message:'Upload failed');}
@@ -366,9 +379,21 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
     setExtracting(true);
     setUploadMsg('');
     try{
+      const fileData=getUploadedResumeFileData();
+      const requestBody: Record<string, unknown> = {
+        apiKeyOverride:wizAnthropicKey,
+        aiProvider:wizProvider
+      };
+
+      if(wizProvider==='gemini' && fileData){
+        requestBody.fileId=fileData;
+      }else{
+        requestBody.resumeText=text;
+      }
+
       const res=await fetch('/api/extract-profile',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({resumeText:text,apiKeyOverride:wizAnthropicKey,aiProvider:wizProvider}),
+        body:JSON.stringify(requestBody),
       });
       const data=await safeJson(res);
       if(!res.ok){
@@ -695,9 +720,11 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
                 setCoverUploadMsg('Storing file...');
                 try{
                   const text=await parseFile(f);
+                  const dataUri=await fileToDataUri(f);
                   const ext=f.name.split('.').pop()?.toLowerCase() as UploadMeta['fileType'];
                   const meta={filename:f.name,uploadedAt:new Date().toISOString(),fileType:ext};
                   setUploadedCover(text,meta);
+                  setUploadedCoverFileData(dataUri);
                   setWizCoverMeta(meta);
                   setCoverUploadMsg('✓ Cover letter stored');
                 }catch(err:unknown){setCoverUploadMsg(err instanceof Error?err.message:'Upload failed');}
@@ -1823,10 +1850,11 @@ export default function Home() {
 
   const handleUpload=async(file:File,type:'resume'|'cover')=>{
     const content=await parseFile(file);
+    const dataUri=await fileToDataUri(file);
     const ext=file.name.split('.').pop()?.toLowerCase() as UploadMeta['fileType'];
     const meta:UploadMeta={filename:file.name,uploadedAt:new Date().toISOString(),fileType:ext};
-    if(type==='resume'){setUploadedResume(content,meta);setResumeMeta(meta);}
-    else{setUploadedCover(content,meta);setCoverMeta(meta);}
+    if(type==='resume'){setUploadedResume(content,meta);setUploadedResumeFileData(dataUri);setResumeMeta(meta);}
+    else{setUploadedCover(content,meta);setUploadedCoverFileData(dataUri);setCoverMeta(meta);}
   };
 
   // Open modal immediately, start background analysis after modal renders
