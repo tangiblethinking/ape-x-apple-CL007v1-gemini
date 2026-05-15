@@ -50,15 +50,28 @@ Output the JSON array only.`;
 
 // ── Profile Extractor ────────────────────────────────────────
 export function getGeminiExtractProfilePrompt(): string {
-  return `TASK: Extract structured profile data from the provided resume document.
+  return `Extract the following information from the resume and return it as JSON:
 
-Rules:
-- Use only information explicitly present in the document.
-- If targetTitles is blank, guess candidate's current role title plus 3 logical senior next-step titles.
-- Clean links: For linkedinUrl or portfolioUrl, remove "https://" and "www." prefixes.
-- Convert yearsExperience to a total number string based on their job timeline.
+Required fields:
+- name: candidate's full name
+- email: email address
+- skills: array of technical/professional skills
 
-Map extracted information directly into the properties requested in your schema implementation.`;
+Optional fields:
+- phone: phone number
+- linkedinUrl: LinkedIn URL (remove https:// and www.)
+- portfolioUrl: portfolio/website URL (remove https:// and www.)
+- mostRecentRole: most recent job title
+- mostRecentEmployer: most recent company name
+- yearsExperience: total years of work experience as a string
+- coreStrengths: key strengths or expertise areas
+- discipline: primary field or discipline
+- targetTitles: array of 3-5 job titles (current role plus logical next steps)
+- targetSectors: array of industries the candidate has worked in
+- salaryMin: minimum salary as number (0 if not found)
+- salaryMax: maximum salary as number (0 if not found)
+
+Extract ONLY information explicitly stated in the resume. Return valid JSON with these exact field names.`;
 }
 
 // ── Job Analyzer ─────────────────────────────────────────────

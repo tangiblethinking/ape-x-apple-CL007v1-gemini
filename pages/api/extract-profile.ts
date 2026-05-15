@@ -76,11 +76,12 @@ export default async function handler(
         });
       }
 
-      // Safeguard adjustments to protect your frontend validations from empty arrays/strings
-      if (!profile.name) profile.name = "Candidate Name";
-      if (!profile.email) profile.email = "email@example.com";
-      if (!profile.skills || !Array.isArray(profile.skills) || profile.skills.length === 0) {
-        profile.skills = ["Professional Skills"];
+      if (!profile.name || !profile.email) {
+        return res.status(400).json({
+          error: 'Extraction incomplete',
+          details: 'Missing required fields. Try uploading plain text or HTML resume.',
+          rawResponse: JSON.stringify(profile).slice(0, 500),
+        });
       }
 
       return res.status(200).json({ profile });
@@ -138,11 +139,13 @@ export default async function handler(
       });
     }
 
-    // Safeguard adjustments
-    if (!profile.name) profile.name = "Candidate Name";
-    if (!profile.email) profile.email = "email@example.com";
-    if (!profile.skills || !Array.isArray(profile.skills) || profile.skills.length === 0) {
-      profile.skills = ["Professional Skills"];
+    // Validate required fields
+    if (!profile.name || !profile.email) {
+      return res.status(400).json({
+        error: 'Extraction incomplete',
+        details: 'Missing required fields (name or email). Try a different resume format.',
+        rawResponse: JSON.stringify(profile).slice(0, 500),
+      });
     }
 
     return res.status(200).json({ profile });
