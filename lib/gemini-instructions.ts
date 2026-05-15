@@ -55,12 +55,13 @@ export function getGeminiExtractProfilePrompt(): string {
 Rules:
 - Use only information explicitly present in the resume
 - Missing fields: use "" for strings, [] for arrays, 0 for numbers
+- skills: An array of strings representing key technical or domain skills (REQUIRED)
 - targetTitles: candidate's current role title plus 3-5 logical senior next-step titles
 - linkedinUrl / portfolioUrl: remove https:// and www. prefixes
 - yearsExperience: total years from first to most recent role, as a number string
 
 Output this JSON object only — no markdown, no explanation:
-{"name":"","email":"","phone":"","linkedinUrl":"","portfolioUrl":"","additionalLinks":[{"title":"","url":""}],"mostRecentRole":"","mostRecentEmployer":"","yearsExperience":"","coreStrengths":"","discipline":"","targetTitles":[],"targetSectors":[],"salaryMin":0,"salaryMax":0,"additionalUrlsFound":[]}`;
+{"name":"","email":"","skills":[],"phone":"","linkedinUrl":"","portfolioUrl":"","additionalLinks":[{"title":"","url":""}],"mostRecentRole":"","mostRecentEmployer":"","yearsExperience":"","coreStrengths":"","discipline":"","targetTitles":[],"targetSectors":[],"salaryMin":0,"salaryMax":0}`;
 }
 
 // ── Job Analyzer ─────────────────────────────────────────────

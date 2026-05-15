@@ -261,7 +261,146 @@ export async function callAI(
   }
 }
 
-// ── JSON Extraction Helper ──────────────────────────────────
+// ── Gemini File Search (RAG) ────────────────────────────────
+async function callGeminiWithFileSearch(
+  apiKey: string,
+  fileId: string,
+  query: string,
+  systemPrompt?: string,
+  maxTokens = 16000
+): Promise<AIResponse> {
+  const triedModels: string[] = [];
+  const maxAttempts = 3;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const { model, error: resolveError } = await resolveGeminiModel(apiKey, triedModels);
+
+      if (!model) {
+        return { text: '', error: resolveError || 'No Gemini model available' };
+      }
+
+      // Normalize fileId to "files/ID" format
+      const normalizedFileId = fileId.startsWith('files/') ? fileId : `files/${fileId}`;
+
+      // CORRECTED PAYLOAD: Remove unsupported tools block, use direct file_uri string
+      const body: Record<string, unknown> = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: query,
+              },
+              {
+                file_data: {
+                  // Use direct resource identifier format, not full URL
+                  file_uri: normalizedFileId,
+                  mime_type: 'application/pdf',
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.2,
+          response_mime_type: 'application/json', // Force JSON output at API level
+        },
+      };
+
+      if (systemPrompt) {
+        body.systemInstruction = {
+          parts: [{ text: systemPrompt }],
+        };
+      }
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const apiMsg = err.error?.message || `Gemini File Search error (${response.status})`;
+        const status = err.error?.status || '';
+
+        const isQuotaError =
+          response.status === 429 ||
+          status === 'RESOURCE_EXHAUSTED' ||
+          /quota|rate limit|exceeded/i.test(apiMsg);
+
+        if (isQuotaError && attempt < maxAttempts - 1) {
+          triedModels.push(model);
+          geminiModelCache.delete(apiKey);
+          continue;
+        }
+
+        if (response.status === 404 && attempt < maxAttempts - 1) {
+          triedModels.push(model);
+          geminiModelCache.delete(apiKey);
+          continue;
+        }
+
+        const triedNote = triedModels.length > 0 ? ` (tried: ${triedModels.join(', ')})` : '';
+        return { text: '', error: `${apiMsg}${triedNote}` };
+      }
+
+      const data = await response.json();
+      const candidate = data.candidates?.[0];
+
+      if (!candidate) {
+        return {
+          text: '',
+          error: `Gemini File Search returned no candidates (model: ${model})`,
+        };
+      }
+
+      if (candidate.finishReason === 'SAFETY') {
+        return { text: '', error: 'Gemini File Search blocked response due to safety filters' };
+      }
+
+      const text = candidate.content?.parts?.[0]?.text || '';
+      if (!text) {
+        return { text: '', error: `Empty response from Gemini File Search (model: ${model})` };
+      }
+
+      return { text };
+    } catch (err: unknown) {
+      return {
+        text: '',
+        error: err instanceof Error ? err.message : 'Unknown Gemini File Search error',
+      };
+    }
+  }
+
+  return {
+    text: '',
+    error: `All Gemini models exhausted after ${maxAttempts} attempts (tried: ${triedModels.join(', ')})`,
+  };
+}
+
+// ── Unified API Call - File Search ──────────────────────────
+export async function callAIWithFileSearch(
+  provider: AIProvider,
+  apiKey: string,
+  fileId: string,
+  query: string,
+  systemPrompt?: string,
+  maxTokens = 16000
+): Promise<AIResponse> {
+  if (provider === 'claude') {
+    return callClaudeAPI(apiKey, [{ role: 'user', content: query }], systemPrompt, maxTokens);
+  } else {
+    return callGeminiWithFileSearch(apiKey, fileId, query, systemPrompt, maxTokens);
+  }
+}
+
+
 // Robustly extracts JSON from a response that may contain markdown fences,
 // explanatory text, or other noise. Tries multiple strategies in order.
 export function extractJSON(raw: string): string {
