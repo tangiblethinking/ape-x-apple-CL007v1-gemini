@@ -101,8 +101,15 @@ async function parseFileBase64(file: File): Promise<string> {
   }
 
   // For binary files, encode to base64 and send to API
+  // Use browser-native btoa (chunked to handle large files) instead of Buffer (Node-only)
   const arrayBuffer = await file.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunkSize)));
+  }
+  const base64 = btoa(binary);
   
   console.log('Sending via base64 fallback, size:', base64.length);
   
@@ -251,12 +258,6 @@ async function parseFile(file: File): Promise<string> {
         }
         console.error('API error response:', errData);
         
-        // If FormData failed, try base64 fallback
-        if (response.status === 400 && errData?.error?.includes('file')) {
-          console.log('FormData parsing failed, trying base64 fallback...');
-          return await parseFileBase64(file);
-        }
-        
         throw new Error(errData?.error || `Server error (${response.status})`);
       }
 
@@ -271,16 +272,20 @@ async function parseFile(file: File): Promise<string> {
       return data.text;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error('✗ parseFile failed:', errMsg);
+      console.error('✗ parseFile FormData failed:', errMsg);
       console.error('Browser:', browser.displayName);
       console.error('File:', file.name);
+      console.log('Attempting base64 fallback after FormData failure...');
       
-      // Provide helpful error message for privacy browsers
-      if (browser.isPrivacyBrowser && errMsg.includes('Server error')) {
-        throw new Error(`${errMsg}. If using ${browser.browserType} shields, try disabling them for this site.`);
+      // Always fall back to base64 on any failure (covers mobile network errors,
+      // non-400 status codes, and privacy browser blocks)
+      try {
+        return await parseFileBase64(file);
+      } catch (fallbackErr) {
+        const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        console.error('✗ Base64 fallback also failed:', fallbackMsg);
+        throw new Error(fallbackMsg);
       }
-      
-      throw new Error(errMsg);
     }
   }
 

@@ -41,14 +41,11 @@ async function parseDocx(filePath: string): Promise<string> {
 async function parsePdf(filePath: string): Promise<string> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PDFParse } = require('pdf-parse');
-    if (!PDFParse) throw new Error('PDFParse not available');
+    const pdfParse = require('pdf-parse');
     const fileBuffer = fs.readFileSync(filePath);
     if (!fileBuffer || fileBuffer.length === 0) throw new Error('PDF file is empty');
-    const parser = new PDFParse({ data: fileBuffer });
-    const result = await parser.getText();
+    const result = await pdfParse(fileBuffer);
     if (!result || !result.text) throw new Error('No text in PDF');
-    await parser.destroy();
     return result.text.trim();
   } catch (err) {
     throw new Error(`PDF: ${err instanceof Error ? err.message : 'Parse error'}`);
