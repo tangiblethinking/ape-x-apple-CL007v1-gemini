@@ -79,18 +79,12 @@ async function parseDocx(filePath: string): Promise<string> {
  */
 async function parsePdf(filePath: string): Promise<string> {
   try {
+    // Load worker first so pdfjs uses _mainThreadWorkerMessageHandler
+    // instead of spawning a worker thread (which fails in serverless/Vercel)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('pdfjs-dist/legacy/build/pdf.worker.js');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const nodePath = require('path');
-
-    // Set absolute worker path so Node.js eval(require) resolves it correctly
-    // in /var/task/node_modules/pdfjs-dist/legacy/build/ on Vercel
-    const workerPath = nodePath.join(
-      nodePath.dirname(require.resolve('pdfjs-dist/legacy/build/pdf.js')),
-      'pdf.worker.js'
-    );
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
 
     console.log('[parse-resume] Reading PDF file:', filePath);
     const fileBuffer = fs.readFileSync(filePath);
