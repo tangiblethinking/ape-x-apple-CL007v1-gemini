@@ -79,12 +79,11 @@ async function parseDocx(filePath: string): Promise<string> {
  */
 async function parsePdf(filePath: string): Promise<string> {
   try {
-    // Static require for build-time resolution
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const PDFParse = require('pdf-parse');
+    const { PDFParse } = require('pdf-parse');
 
     if (!PDFParse) {
-      throw new Error('pdf-parse module not available');
+      throw new Error('PDFParse not exported from pdf-parse module');
     }
 
     console.log('[parse-resume] Reading PDF file:', filePath);
@@ -94,14 +93,15 @@ async function parsePdf(filePath: string): Promise<string> {
     }
 
     console.log('[parse-resume] Parsing PDF buffer, size:', fileBuffer.length);
-    const data = await PDFParse(fileBuffer);
-    console.log('[parse-resume] PDF parsed, text length:', data?.text?.length || 0);
+    const parser = new PDFParse({ buffer: fileBuffer });
+    const result = await parser.getText();
+    console.log('[parse-resume] PDF parsed, text length:', result?.text?.length || 0);
     
-    if (!data || !data.text) {
+    if (!result || !result.text) {
       throw new Error('No text in PDF - may be image-based or encrypted');
     }
 
-    return data.text.trim();
+    return result.text.trim();
   } catch (err) {
     console.error('[parse-resume] PDF parsing error:', err);
     throw new Error(`PDF: ${err instanceof Error ? err.message : 'Parse error'}`);
