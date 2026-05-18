@@ -35,8 +35,10 @@ function getTempDir(): string {
       const testFile = path.join(dir, `.test-${Date.now()}`);
       fs.writeFileSync(testFile, 'test');
       fs.unlinkSync(testFile);
+      console.log('[parse-resume] Using temp dir:', dir);
       return dir;
-    } catch {
+    } catch (err) {
+      console.log('[parse-resume] Temp dir failed:', dir, '-', err instanceof Error ? err.message : 'Unknown');
       continue;
     }
   }
@@ -57,13 +59,17 @@ async function parseDocx(filePath: string): Promise<string> {
       throw new Error('mammoth module not properly loaded');
     }
 
+    console.log('[parse-resume] Parsing DOCX file:', filePath);
     const result = await mammoth.extractRawText({ path: filePath });
+    console.log('[parse-resume] DOCX parsed, text length:', result?.value?.length || 0);
+    
     if (!result || !result.value) {
       throw new Error('No text extracted from DOCX');
     }
 
     return result.value.trim();
   } catch (err) {
+    console.error('[parse-resume] DOCX parsing error:', err);
     throw new Error(`DOCX: ${err instanceof Error ? err.message : 'Parse error'}`);
   }
 }
@@ -81,18 +87,23 @@ async function parsePdf(filePath: string): Promise<string> {
       throw new Error('pdf-parse module not available');
     }
 
+    console.log('[parse-resume] Reading PDF file:', filePath);
     const fileBuffer = fs.readFileSync(filePath);
     if (!fileBuffer || fileBuffer.length === 0) {
       throw new Error('PDF file is empty');
     }
 
+    console.log('[parse-resume] Parsing PDF buffer, size:', fileBuffer.length);
     const data = await PDFParse(fileBuffer);
+    console.log('[parse-resume] PDF parsed, text length:', data?.text?.length || 0);
+    
     if (!data || !data.text) {
       throw new Error('No text in PDF - may be image-based or encrypted');
     }
 
     return data.text.trim();
   } catch (err) {
+    console.error('[parse-resume] PDF parsing error:', err);
     throw new Error(`PDF: ${err instanceof Error ? err.message : 'Parse error'}`);
   }
 }
@@ -106,18 +117,22 @@ async function parseHtml(filePath: string): Promise<string> {
       throw new Error('File not found');
     }
 
+    console.log('[parse-resume] Reading HTML file:', filePath);
     const content = fs.readFileSync(filePath, 'utf-8');
     if (!content) {
       throw new Error('File is empty');
     }
 
     const text = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    console.log('[parse-resume] HTML parsed, text length:', text.length);
+    
     if (!text) {
       throw new Error('No text content found');
     }
 
     return text;
   } catch (err) {
+    console.error('[parse-resume] HTML parsing error:', err);
     throw new Error(`HTML: ${err instanceof Error ? err.message : 'Parse error'}`);
   }
 }
@@ -129,7 +144,10 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ParseResponse>
 ) {
+  console.log('[parse-resume] Request received, method:', req.method);
+  
   if (req.method !== 'POST') {
+    console.error('[parse-resume] Wrong method:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -154,41 +172,60 @@ export default async function handler(
       maxFileSize: 50 * 1024 * 1024,
     });
 
-    let fields, files;
+    let fields: any = {}, files: any = {};
     try {
       [fields, files] = await form.parse(req);
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Form parse error';
+      console.error('[parse-resume] Form parse error:', errMsg);
       return res.status(400).json({
         error: 'File upload failed',
-        details: err instanceof Error ? err.message : 'Form parse error',
+        details: errMsg,
       });
     }
 
-    // Get file
-    const fileArray = Array.isArray(files.file) ? files.file : [files.file];
-    const file = fileArray?.[0];
+    // Debug: Log what we got
+    console.log('[parse-resume] Files received:', Object.keys(files));
+    console.log('[parse-resume] Files.file type:', Array.isArray(files.file) ? 'array' : typeof files.file);
+
+    // Get file - files.file can be array or single object
+    let file;
+    if (Array.isArray(files.file)) {
+      file = files.file[0];
+    } else if (files.file) {
+      file = files.file;
+    }
 
     if (!file) {
+      console.error('[parse-resume] No file in files object');
       return res.status(400).json({ error: 'No file provided' });
     }
 
     filePath = (file as any).filepath || (file as any).path;
-    const fileName = (file as any).originalFilename || (file as any).name || '';
+    const fileName = (file as any).originalFilename || (file as any).name || file.newFilename || '';
 
-    if (!filePath) {
-      return res.status(400).json({ error: 'File path missing' });
+    console.log('[parse-resume] File path:', filePath);
+    console.log('[parse-resume] File name:', fileName);
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      console.error('[parse-resume] File path missing or does not exist:', filePath);
+      return res.status(400).json({ error: 'File path missing or invalid' });
     }
 
     // Get extension
     const ext = path.extname(fileName).toLowerCase().slice(1);
     if (!ext) {
-      return res.status(400).json({ error: 'File has no extension' });
+      console.error('[parse-resume] File has no extension:', fileName);
+      return res.status(400).json({ error: 'File has no extension', details: `Got: ${fileName}` });
     }
+    
+    console.log('[parse-resume] File extension:', ext);
 
     let text = '';
 
     // Parse by type
     try {
+      console.log('[parse-resume] Starting parse for type:', ext);
       if (ext === 'html' || ext === 'htm') {
         text = await parseHtml(filePath);
       } else if (ext === 'docx') {
@@ -196,24 +233,29 @@ export default async function handler(
       } else if (ext === 'pdf') {
         text = await parsePdf(filePath);
       } else {
+        console.error('[parse-resume] Unsupported extension:', ext);
         return res.status(400).json({
           error: `Unsupported: .${ext}`,
           details: 'Use .html, .docx, or .pdf',
         });
       }
+      console.log('[parse-resume] Parse successful, text length:', text.length);
     } catch (parseErr) {
       const msg = parseErr instanceof Error ? parseErr.message : 'Unknown error';
+      console.error('[parse-resume] Parse catch block:', msg);
       return res.status(400).json({ error: 'Parse failed', details: msg });
     }
 
     // Validate text
     if (!text || text.length === 0) {
+      console.error('[parse-resume] No text after parsing');
       return res.status(400).json({
         error: 'No text extracted',
         details: 'File may be empty, image-based, or corrupted',
       });
     }
 
+    console.log('[parse-resume] Success! Returning', text.length, 'characters');
     return res.status(200).json({ text: text.substring(0, 50000) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
