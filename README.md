@@ -46,3 +46,4 @@ Requires Anthropic and Serper API keys (enter in Settings tab).
 
 ## Stack
 Next.js · TypeScript · Anthropic Claude API · Serper Search API
+# Force rebuild
