@@ -91,6 +91,42 @@ function fmtSalary(n: number): string {
   if (n === 0) return 'Volunteer';
   return `$${(n/1000).toFixed(0)}K`;
 }
+// Parse via base64 fallback (for when FormData fails on mobile)
+async function parseFileBase64(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  
+  if (ext === 'html' || ext === 'htm') {
+    const html = await file.text();
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // For binary files, encode to base64 and send to API
+  const arrayBuffer = await file.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString('base64');
+  
+  console.log('Sending via base64 fallback, size:', base64.length);
+  const response = await fetch('/api/parse-resume-base64', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: file.name,
+      data: base64,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData?.error || `Server error (${response.status})`);
+  }
+
+  const result = await response.json();
+  if (!result.text) {
+    throw new Error(result.error || 'No text extracted');
+  }
+
+  return result.text;
+}
+
 // Browser detection utility
 function getBrowserInfo() {
   const ua = navigator.userAgent;
@@ -199,6 +235,13 @@ async function parseFile(file: File): Promise<string> {
           console.error('Failed to parse error response:', parseErr);
         }
         console.error('API error response:', errData);
+        
+        // If FormData failed, try base64 fallback
+        if (response.status === 400 && errData?.error?.includes('file')) {
+          console.log('FormData parsing failed, trying base64 fallback...');
+          return await parseFileBase64(file);
+        }
+        
         throw new Error(errData?.error || `Server error (${response.status})`);
       }
 
