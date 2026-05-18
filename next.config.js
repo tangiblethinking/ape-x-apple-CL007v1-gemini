@@ -8,6 +8,20 @@ const nextConfig = {
         buffer: require.resolve('buffer/'),
       };
     }
+    if (isServer) {
+      // Do not bundle pdfjs-dist — let Node.js require() it at runtime
+      // This preserves the relative './pdf.worker.js' path resolution
+      const existingExternals = config.externals || [];
+      config.externals = [
+        ...(Array.isArray(existingExternals) ? existingExternals : [existingExternals]),
+        ({ request }, callback) => {
+          if (request && request.startsWith('pdfjs-dist')) {
+            return callback(null, 'commonjs ' + request);
+          }
+          callback();
+        },
+      ];
+    }
     return config;
   },
 };
