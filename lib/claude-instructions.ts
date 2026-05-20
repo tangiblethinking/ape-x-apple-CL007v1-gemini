@@ -88,16 +88,30 @@ CRITICAL: Return ONLY the JSON array. Start with [ and end with ]. No explanatio
 }
 
 // ── Profile Extractor ────────────────────────────────────────
+// IMPORTANT: This system prompt is used both for plain-text extraction AND
+// for forced tool_use extraction. The hard anti-hallucination rules below
+// are critical to prevent URL fabrication, which was a recurring bug.
 export function getClaudeExtractProfilePrompt(): string {
-  return `You are a precise resume parser. Your sole task is to extract structured profile data from resume text.
+  return `You are a precise resume parser. Your sole task is to extract structured profile data from the resume text provided by the user.
 
-Rules:
-- Extract only what is explicitly present in the resume text — do not infer or fabricate
-- For fields not found, use empty string "" or empty array []
-- salaryMin and salaryMax: set to 0 unless compensation is explicitly stated
-- targetTitles: derive from the candidate's most recent role — include current level title plus 3–5 logical next-step senior titles
-- linkedinUrl and portfolioUrl: strip https:// and www. prefixes
-- yearsExperience: calculate from earliest to most recent role as a numeric string
+ABSOLUTE RULES (violating any of these is a critical failure):
+1. EXTRACT-ONLY: Only output values that are LITERALLY PRESENT in the resume text. Never infer, guess, normalize, or invent any value — especially URLs, emails, phone numbers, employer names, or job titles.
+2. URL VERBATIM RULE: For ANY URL field (linkedinUrl, portfolioUrl, additionalLinks), the URL MUST appear character-for-character in the resume text. If you cannot point to the exact substring in the resume, return an empty string "". Do NOT guess URLs from a candidate's name (e.g. do not assume "linkedin.com/in/firstname-lastname"). Do NOT construct URLs from company names. Do NOT autocomplete partial URLs.
+3. URL NORMALIZATION (allowed only AFTER verbatim presence is confirmed): strip leading "https://" and "www." prefixes. Preserve the rest exactly. Do not add or remove trailing slashes, paths, or query strings.
+4. EMAIL & PHONE: Must appear verbatim in the resume. Do not invent format.
+5. EMPTY > WRONG: When a field is not present, ALWAYS prefer empty string "" or empty array [] over a guess. There is no penalty for empty fields; there is severe penalty for fabricated fields.
+
+DERIVATION RULES (these fields may be derived, not literally quoted):
+- yearsExperience: calculate from earliest dated role to most recent role. Return as numeric string (e.g. "12"). Use "" if dates unclear.
+- targetTitles: derive from the candidate's most recent role title. Include the current-level title plus 3–5 logical next-step senior titles (e.g. if "Senior Product Designer", include "Senior Product Designer", "Staff Product Designer", "Principal Product Designer", "Design Manager", "Director of Product Design"). Base titles strictly on the candidate's actual discipline as evidenced by the resume.
+- targetSectors: list industries the candidate has explicitly worked in based on listed employers.
+- coreStrengths and discipline: short phrases summarizing what is explicitly demonstrated in the resume.
+- salaryMin/salaryMax: 0 unless compensation is explicitly stated.
+
+ADDITIONAL LINKS:
+- additionalLinks should contain any non-LinkedIn, non-portfolio URLs found verbatim in the resume (e.g. GitHub, Behance, Dribbble, Medium, personal blog). Each item: {"title": "platform or short label", "url": "verbatim url with https:// and www. stripped"}.
+- Do NOT include the same URL that is already in linkedinUrl or portfolioUrl.
+- If no additional URLs are present in the resume, return an empty array [].
 
 Return ONLY this exact JSON object — no markdown fences, no explanation, no preamble:
 {
@@ -106,7 +120,7 @@ Return ONLY this exact JSON object — no markdown fences, no explanation, no pr
   "phone": "",
   "linkedinUrl": "",
   "portfolioUrl": "",
-  "additionalLinks": [{"title": "", "url": ""}],
+  "additionalLinks": [],
   "mostRecentRole": "",
   "mostRecentEmployer": "",
   "yearsExperience": "",
@@ -115,10 +129,58 @@ Return ONLY this exact JSON object — no markdown fences, no explanation, no pr
   "targetTitles": [],
   "targetSectors": [],
   "salaryMin": 0,
-  "salaryMax": 0,
-  "additionalUrlsFound": []
+  "salaryMax": 0
 }`;
 }
+
+// ── Profile Extractor — Tool Schema (forced tool_use mode) ──
+// Use with tool_choice: {type: "tool", name: "extract_profile"} for
+// schema-constrained extraction. This is more reliable than JSON-in-prose
+// because the input_schema acts as a hard grammar constraint at decode time.
+export const CLAUDE_EXTRACT_PROFILE_TOOL = {
+  name: 'extract_profile',
+  description: 'Records candidate profile data extracted from a resume. All URL fields MUST appear verbatim in the resume — never invent or guess URLs from names or companies. Empty string is the correct value when a field is not present.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Candidate full name as it appears in the resume.' },
+      email: { type: 'string', description: 'Email address copied verbatim from the resume. Empty string if not present.' },
+      phone: { type: 'string', description: 'Phone number copied verbatim from the resume. Empty string if not present.' },
+      linkedinUrl: { type: 'string', description: 'LinkedIn URL that appears verbatim in the resume, with https:// and www. stripped. Empty string if no LinkedIn URL appears in the resume. Do not guess from the candidate name.' },
+      portfolioUrl: { type: 'string', description: 'Portfolio or personal website URL that appears verbatim in the resume, with https:// and www. stripped. Empty string if not present. Do not guess from the candidate name or employer.' },
+      additionalLinks: {
+        type: 'array',
+        description: 'Other URLs (GitHub, Behance, Dribbble, blog, etc.) that appear verbatim in the resume. Do not duplicate linkedinUrl or portfolioUrl.',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Short platform label, e.g. "GitHub", "Behance", "Medium".' },
+            url: { type: 'string', description: 'Verbatim URL from the resume with https:// and www. stripped.' }
+          },
+          required: ['title', 'url']
+        }
+      },
+      mostRecentRole: { type: 'string', description: 'Most recent job title from the resume.' },
+      mostRecentEmployer: { type: 'string', description: 'Most recent employer name from the resume.' },
+      yearsExperience: { type: 'string', description: 'Numeric string of total years between earliest and most recent role, e.g. "12". Empty string if dates unclear.' },
+      coreStrengths: { type: 'string', description: 'Short phrase summarizing the candidate\'s core strengths as evidenced by the resume.' },
+      discipline: { type: 'string', description: 'Primary discipline or field (e.g. "Product Design", "Software Engineering").' },
+      targetTitles: {
+        type: 'array',
+        description: '3-5 logical job titles to target — the candidate\'s current-level title plus next-step senior titles in the same discipline.',
+        items: { type: 'string' }
+      },
+      targetSectors: {
+        type: 'array',
+        description: 'Industries the candidate has explicitly worked in, derived from listed employers.',
+        items: { type: 'string' }
+      },
+      salaryMin: { type: 'number', description: 'Minimum salary if explicitly stated in the resume, else 0.' },
+      salaryMax: { type: 'number', description: 'Maximum salary if explicitly stated in the resume, else 0.' }
+    },
+    required: ['name', 'email', 'linkedinUrl', 'portfolioUrl', 'additionalLinks', 'mostRecentRole', 'mostRecentEmployer', 'yearsExperience', 'coreStrengths', 'discipline', 'targetTitles', 'targetSectors', 'salaryMin', 'salaryMax', 'phone']
+  }
+};
 
 // ── Job Analyzer ─────────────────────────────────────────────
 export function getClaudeAnalyzeJobPrompt(profileStr: string): string {

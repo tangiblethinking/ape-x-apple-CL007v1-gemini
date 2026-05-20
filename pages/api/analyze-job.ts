@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { callAI, extractJSON, AIProvider } from '../../lib/ai-providers';
+import { callAI, extractJSON, AIProvider, GEMINI_JOB_CARD_SCHEMA } from '../../lib/ai-providers';
 import { getClaudeAnalyzeJobPrompt } from '../../lib/claude-instructions';
 import { getGeminiAnalyzeJobPrompt } from '../../lib/gemini-instructions';
 
@@ -44,7 +44,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         content: `Company: ${company}\nJob Title: ${title}\nApply URL: ${applyUrl||'N/A'}\nJob Description URL: ${jobDescUrl||'N/A'}\nCareers URL: ${careersUrl||'N/A'}\n\n${hasContent ? `Job Content:\n${jobContent}` : 'No job description — generate from company name and title only.'}`,
       }],
       systemPrompt,
-      4000
+      4000,
+      provider === 'gemini' ? GEMINI_JOB_CARD_SCHEMA : undefined
     );
 
     if (aiResponse.error) {

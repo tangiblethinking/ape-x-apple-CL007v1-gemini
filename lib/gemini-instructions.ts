@@ -49,29 +49,43 @@ Output the JSON array only.`;
 }
 
 // ── Profile Extractor ────────────────────────────────────────
+// Gemini-specific: positive framing, explicit step-by-step protocol,
+// every field listed with example. Pairs with the responseSchema defined
+// in lib/ai-providers.ts which acts as a hard structural constraint.
 export function getGeminiExtractProfilePrompt(): string {
-  return `Extract the following information from the resume and return it as JSON:
+  return `TASK: Extract structured profile data from the resume and return a single JSON object that matches the response schema exactly.
 
-Required fields:
-- name: candidate's full name
-- email: email address
-- skills: array of technical/professional skills
+STEP-BY-STEP EXTRACTION PROTOCOL:
+1. Read the entire resume top to bottom before extracting any field.
+2. For each field, search the resume text for the value. If the value is not present in the resume, output the empty default (empty string "" for strings, empty array [] for arrays, 0 for numbers).
+3. For URL fields (linkedinUrl, portfolioUrl, additionalLinks), the URL must appear verbatim in the resume text. If no URL is present, output "". Do not construct URLs from the candidate name or employer.
+4. After confirming a URL is present verbatim, strip the "https://" and "www." prefix. Keep the rest exactly as written.
+5. For targetTitles, list the candidate's current job-title level plus 3-5 next-step senior titles in the SAME discipline.
+6. For yearsExperience, calculate the year span between the earliest and most recent role and return it as a numeric string (e.g. "12").
+7. For salaryMin and salaryMax, output 0 unless compensation is explicitly written in the resume.
+8. For additionalLinks, include any non-LinkedIn, non-portfolio URLs found in the resume (GitHub, Behance, Dribbble, Medium, personal blog, etc.). Each item is {"title": "short label", "url": "verbatim url with https:// and www. stripped"}. Output an empty array [] if none found.
 
-Optional fields:
-- phone: phone number
-- linkedinUrl: LinkedIn URL (remove https:// and www.)
-- portfolioUrl: portfolio/website URL (remove https:// and www.)
-- mostRecentRole: most recent job title
-- mostRecentEmployer: most recent company name
-- yearsExperience: total years of work experience as a string
-- coreStrengths: key strengths or expertise areas
-- discipline: primary field or discipline
-- targetTitles: array of 3-5 job titles (current role plus logical next steps)
-- targetSectors: array of industries the candidate has worked in
-- salaryMin: minimum salary as number (0 if not found)
-- salaryMax: maximum salary as number (0 if not found)
+REQUIRED FIELDS (must be present in output):
+- name: candidate full name (string)
+- email: email address verbatim from resume (string)
+- skills: array of technical or professional skills explicitly listed (array of strings)
 
-Extract ONLY information explicitly stated in the resume. Return valid JSON with these exact field names.`;
+ADDITIONAL FIELDS TO POPULATE:
+- phone: phone number verbatim (string)
+- linkedinUrl: LinkedIn URL verbatim, prefix-stripped (string)
+- portfolioUrl: portfolio or personal site URL verbatim, prefix-stripped (string)
+- additionalLinks: other links found in resume (array of {title, url})
+- mostRecentRole: most recent job title (string)
+- mostRecentEmployer: most recent company name (string)
+- yearsExperience: total years experience as numeric string (string)
+- coreStrengths: short summary of strengths from resume content (string)
+- discipline: primary field (e.g. "Product Design") (string)
+- targetTitles: 3-5 job titles to target (array of strings)
+- targetSectors: industries the candidate has worked in (array of strings)
+- salaryMin: minimum salary if stated, else 0 (number)
+- salaryMax: maximum salary if stated, else 0 (number)
+
+OUTPUT: Single JSON object matching the response schema. No markdown, no explanation, no preamble.`;
 }
 
 // ── Job Analyzer ─────────────────────────────────────────────

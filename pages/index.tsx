@@ -13,6 +13,7 @@ import {
   deleteAppliedJob, clearAppliedJobs, isJobApplied,
   getSavedInstructions, saveInstructions,
   getLocalApiKey, setLocalApiKey,
+  getApiKey, setApiKey,
   getLocalSerperKey, setLocalSerperKey,
   setLastSearchQuery,
   setUploadedResume, getUploadedResume, getUploadedResumeMeta,
@@ -26,6 +27,9 @@ import {
   getWizardSeen, setWizardSeen,
   SavedJob, AppliedJob, StatusEntry, UploadMeta,
   getAIProvider, setAIProvider, AIProvider,
+  computeExtractionSignature, getStoredExtractionSignature,
+  setStoredExtractionSignature, clearStoredExtractionSignature,
+  isExtractionStale,
 } from '../lib/storage';
 import {
   DEFAULT_PROFILE, buildJobSearchInstructions,
@@ -478,16 +482,17 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
     setMaxVisitedStep(m=>Math.max(m,n));
   };
   const [profile,setProfile]=useState<CandidateProfile>({...initialProfile});
-  const [wizAnthropicKey,setWizAnthropicKey]=useState(initialAnthropicKey);
+  // Initialize with the key for the CURRENT provider, not a generic key.
+  const [wizAnthropicKey,setWizAnthropicKey]=useState(()=>getApiKey(initialProvider)||initialAnthropicKey);
   const [wizSerperKey,setWizSerperKey]=useState(initialSerperKey);
   const [wizProvider,setWizProvider]=useState<AIProvider>(initialProvider);
 
-  // Reload keys from localStorage when wizard opens (handles re-open without app reset)
+  // Reload keys from per-provider storage when wizard opens
   useEffect(()=>{
-    const storedKey=getLocalApiKey();
+    const storedKey=getApiKey(wizProvider);
     const storedSerper=getLocalSerperKey();
     const storedProvider=getAIProvider();
-    if(storedKey&&!wizAnthropicKey) setWizAnthropicKey(storedKey);
+    if(storedKey) setWizAnthropicKey(storedKey);
     if(storedSerper&&!wizSerperKey) setWizSerperKey(storedSerper);
     if(storedProvider) setWizProvider(storedProvider);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -520,15 +525,20 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
   const serperValid=wizSerperKey.length>10;
   const keysComplete=anthropicValid&&serperValid;
 
-  // Clear API key when provider changes to avoid validation confusion
+  // On provider switch, load that provider's stored key (if any).
+  // This auto-populates the API key field when toggling between Claude/Gemini
+  // when keys for both providers have been saved previously.
+  // User can still edit — the edited value will persist on save.
   useEffect(()=>{
-    setWizAnthropicKey('');
+    const storedForProvider=getApiKey(wizProvider);
+    setWizAnthropicKey(storedForProvider);
   },[wizProvider]);
 
   const upd=(k:keyof CandidateProfile,v:CandidateProfile[keyof CandidateProfile])=>
     setProfile(p=>({...p,[k]:v}));
 
-  // Store resume file on upload but do NOT extract yet
+  // Store resume file on upload but do NOT extract yet.
+  // Clear extraction signature so the next "Next" click forces re-extraction.
   const handleResumeUpload=async(file:File)=>{
     setUploading(true);
     try{
@@ -540,19 +550,41 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
       setUploadedResume(text,meta);
       setUploadedResumeFileData(dataUri);
       setWizResumeMeta(meta);
+      // Invalidate prior extraction — new resume requires re-extraction
+      clearStoredExtractionSignature();
+      setExtractedFields(new Set());
       setUploadMsg('✓ Resume ready');
     }catch(e:unknown){setUploadMsg(e instanceof Error?e.message:'Upload failed');}
     finally{setUploading(false);}
   };
 
-  // Extract on Next click at resume step — runs extraction then advances
+  // Extract on Next click at resume step — runs extraction then advances.
+  // CRITICAL: Re-extracts whenever the resume content, provider, or API key has changed
+  // since the last successful extraction. Override = wipe extractedFields + re-run.
   const extractAndAdvance=async()=>{
     const text=resumeTextRef.current||getUploadedResume();
+    const meta=wizResumeMeta||getUploadedResumeMeta();
+    const filename=meta?.filename||'';
+
     if(!text){
       setUploadMsg('⚠ No text extracted from resume. Your PDF may be image-based (scanned). Try uploading an HTML or DOCX version instead.');
       goToStep(step+1);
       return;
     }
+
+    // Compute current signature; compare to stored
+    const currentSig=computeExtractionSignature(text,filename,wizProvider,wizAnthropicKey);
+    const storedSig=getStoredExtractionSignature();
+    const stale=isExtractionStale(currentSig,storedSig);
+
+    // If extraction is fresh AND profile already has data from prior run, skip
+    if(!stale && profile.name && profile.email){
+      goToStep(step+1);
+      return;
+    }
+
+    // Stale (or first run): force re-extraction. Clear previous extraction markers.
+    setExtractedFields(new Set());
     setExtracting(true);
     setUploadMsg('');
     try{
@@ -574,7 +606,6 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
       });
       const data=await safeJson(res);
       if(!res.ok){
-        // Surface the error on the resume step — don't silently advance
         setUploadMsg(`⚠ Extraction failed: ${(data.error as string)||'Unknown error'}. You can fill in your profile manually.`);
         setExtracting(false);
         goToStep(step+1);
@@ -583,39 +614,46 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ex: any =(data.profile as Record<string,unknown>)||{};
       const found=new Set<string>();
-      // Map all extracted fields, track which ones were populated
+      // OVERRIDE: do not merge with previous profile fields — replace them
+      // so a provider/key change cannot leave stale data from the prior extraction.
       setProfile(p=>{
         const next={...p};
-        const trySet=(key:keyof CandidateProfile,val:unknown)=>{
-          if(val&&(Array.isArray(val)?val.length>0:String(val).trim())){
+        const setField=(key:keyof CandidateProfile,val:unknown,allowEmpty=false)=>{
+          if(allowEmpty||(val&&(Array.isArray(val)?val.length>0:String(val).trim()))){
             (next as Record<string,unknown>)[key]=val;
-            found.add(key);
+            if(val&&(Array.isArray(val)?val.length>0:String(val).trim())) found.add(key);
           }
         };
-        trySet('name',ex.name);
-        trySet('email',ex.email);
-        trySet('phone',ex.phone);
-        trySet('linkedinUrl',ex.linkedinUrl);
-        trySet('portfolioUrl',ex.portfolioUrl);
-        trySet('mostRecentRole',ex.mostRecentRole);
-        trySet('mostRecentEmployer',ex.mostRecentEmployer);
-        trySet('yearsExperience',ex.yearsExperience);
-        trySet('coreStrengths',ex.coreStrengths);
-        trySet('discipline',ex.discipline);
-        trySet('targetTitles',ex.targetTitles);
-        trySet('targetSectors',ex.targetSectors);
-        if(ex.salaryMin>0){next.salaryMin=ex.salaryMin;found.add('salaryMin');}
-        if(ex.salaryMax>0){next.salaryMax=ex.salaryMax;found.add('salaryMax');}
-        // Additional links from resume
-        if(ex.additionalLinks?.length){
-          const existing=p.additionalLinks||[];
-          const merged=[...existing,...ex.additionalLinks.filter((l:{url:string})=>!existing.find((e:{url:string})=>e.url===l.url))];
-          next.additionalLinks=merged;
-          if(merged.length>existing.length) found.add('additionalLinks');
-        }
+        setField('name',ex.name);
+        setField('email',ex.email);
+        setField('phone',ex.phone);
+        // URLs — explicitly REPLACE prior values (clear if missing) to prevent
+        // stale hallucinated URLs from a previous provider lingering.
+        next.linkedinUrl=ex.linkedinUrl||'';
+        if(ex.linkedinUrl) found.add('linkedinUrl');
+        next.portfolioUrl=ex.portfolioUrl||'';
+        if(ex.portfolioUrl) found.add('portfolioUrl');
+        setField('mostRecentRole',ex.mostRecentRole);
+        setField('mostRecentEmployer',ex.mostRecentEmployer);
+        setField('yearsExperience',ex.yearsExperience);
+        setField('coreStrengths',ex.coreStrengths);
+        setField('discipline',ex.discipline);
+        // Arrays — REPLACE (not merge) so old targets don't bleed through
+        next.targetTitles=Array.isArray(ex.targetTitles)?ex.targetTitles:[];
+        if(next.targetTitles.length) found.add('targetTitles');
+        next.targetSectors=Array.isArray(ex.targetSectors)?ex.targetSectors:[];
+        if(next.targetSectors.length) found.add('targetSectors');
+        next.salaryMin=ex.salaryMin>0?ex.salaryMin:0;
+        next.salaryMax=ex.salaryMax>0?ex.salaryMax:0;
+        if(next.salaryMin>0||next.salaryMax>0) found.add('salaryMin');
+        // Additional links — REPLACE entirely from latest extraction
+        next.additionalLinks=Array.isArray(ex.additionalLinks)?ex.additionalLinks.filter((l:{url?:string})=>l&&l.url):[];
+        if(next.additionalLinks.length) found.add('additionalLinks');
         return next;
       });
       setExtractedFields(found);
+      // Persist signature only on successful extraction
+      setStoredExtractionSignature(currentSig);
     }catch(e:unknown){
       setUploadMsg(`⚠ Connection error: ${e instanceof Error?e.message:'Unknown error'}. Fill in your profile manually.`);
     }
@@ -657,7 +695,9 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
   };
 
   const finish=()=>{
-    setLocalApiKey(wizAnthropicKey);
+    // Save key to PROVIDER-SPECIFIC slot, not generic slot.
+    // This ensures both Claude and Gemini keys persist independently.
+    setApiKey(wizProvider,wizAnthropicKey);
     setLocalSerperKey(wizSerperKey);
     setAIProvider(wizProvider);
     saveProfile(profile);
@@ -669,8 +709,8 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
   };
 
   const inp=(style?:React.CSSProperties):React.CSSProperties=>({
-    width:'100%',padding:'10px 12px',border:'0.5px solid rgba(60,60,67,0.2)',
-    borderRadius:10,fontSize:14,outline:'none',...style
+    width:'100%',padding:'12px 12px',border:'0.5px solid rgba(60,60,67,0.2)',
+    borderRadius:10,fontSize:16,outline:'none',minHeight:44,...style
   });
   const lbl:React.CSSProperties={fontSize:10,fontWeight:700,letterSpacing:'0.15em',textTransform:'uppercase',color:'rgba(60,60,67,0.6)',marginBottom:6,display:'block'};
 
@@ -1126,7 +1166,7 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
               <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',color:'#007AFF',fontWeight:700,marginBottom:4,display:'flex',alignItems:'center',gap:6}}><Wand2 size={11}/>Guided Setup</div>
               <div style={{fontSize:13,color:'rgba(60,60,67,0.6)'}}>Step {step+1} of {TOTAL_STEPS} — {stepLabels[step]}</div>
             </div>
-            <button onClick={onClose} style={{background:'rgba(120,120,128,0.12)',border:'none',cursor:'pointer',color:'rgba(60,60,67,0.6)',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center'}}><X size={16}/></button>
+            <button onClick={onClose} aria-label="Close wizard" style={{background:'rgba(120,120,128,0.12)',border:'none',cursor:'pointer',color:'rgba(60,60,67,0.6)',borderRadius:'50%',width:36,height:36,minWidth:36,display:'flex',alignItems:'center',justifyContent:'center'}}><X size={18}/></button>
           </div>
           <div style={{height:4,background:'rgba(120,120,128,0.12)',borderRadius:2,overflow:'hidden'}}>
             <div style={{height:'100%',background:'#007AFF',borderRadius:2,width:`${pct}%`,transition:'width 0.3s ease'}}/>
@@ -1199,19 +1239,19 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
 
         {/* Nav */}
         <div style={{padding:'14px 22px',borderTop:'0.5px solid rgba(60,60,67,0.18)',display:'flex',justifyContent:'space-between',position:'sticky',bottom:0,background:'rgba(255,255,255,0.97)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderRadius:'0 0 24px 24px'}}>
-          <button onClick={()=>step>0?goToStep(step-1):onClose()} style={{display:'flex',alignItems:'center',gap:5,padding:'10px 18px',background:'rgba(120,120,128,0.1)',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:13,color:'#000'}}>
+          <button onClick={()=>step>0?goToStep(step-1):onClose()} style={{display:'flex',alignItems:'center',gap:5,padding:'12px 20px',minHeight:44,background:'rgba(120,120,128,0.1)',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:14,color:'#000'}}>
             <ChevronLeft size={14}/>{step===0?'Cancel':'Back'}
           </button>
           {!isLastStep
-            ?<button onClick={()=>step===2?extractAndAdvance():goToStep(step+1)} disabled={extracting} style={{display:'flex',alignItems:'center',gap:5,padding:'10px 22px',background:extracting?'#C7C7CC':'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:extracting?'not-allowed':'pointer',fontWeight:600,fontSize:13}}>
+            ?<button onClick={()=>step===2?extractAndAdvance():goToStep(step+1)} disabled={extracting} style={{display:'flex',alignItems:'center',gap:5,padding:'12px 22px',minHeight:44,background:extracting?'#C7C7CC':'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:extracting?'not-allowed':'pointer',fontWeight:600,fontSize:14}}>
               Next<ChevronRight size={14}/>
             </button>
             :<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6}}>
               <button
                 onClick={canFinish?finish:undefined}
-                style={{display:'flex',alignItems:'center',gap:5,padding:'10px 22px',background:canFinish?'#007AFF':'#C7C7CC',color:'#fff',border:'none',borderRadius:50,cursor:canFinish?'pointer':'not-allowed',fontWeight:600,fontSize:14}}
+                style={{display:'flex',alignItems:'center',gap:5,padding:'12px 22px',minHeight:44,background:canFinish?'#007AFF':'#C7C7CC',color:'#fff',border:'none',borderRadius:50,cursor:canFinish?'pointer':'not-allowed',fontWeight:600,fontSize:14}}
               >
-                <CheckCircle size={15}/>Save & Finish
+                <CheckCircle size={15}/>Save &amp; Finish
               </button>
               {!canFinish&&<div style={{fontSize:11,color:'rgba(60,60,67,0.45)'}}>Complete API keys to enable</div>}
             </div>
@@ -1935,14 +1975,24 @@ export default function Home() {
     setResumeInstr(saved?.resume||DEFAULT_RESUME_INSTRUCTIONS);
     setCoverInstr(saved?.coverLetter||DEFAULT_COVER_LETTER_INSTRUCTIONS);
     setJobs(getSavedJobs()); setAppliedJobs(getAppliedJobs());
-    setAnthropicKey(getLocalApiKey()); setSerperKey(getLocalSerperKey());
-    setAiProvider(getAIProvider());
+    // Load provider FIRST, then load that provider's specific key.
+    const provider=getAIProvider();
+    setAiProvider(provider);
+    setAnthropicKey(getApiKey(provider));
+    setSerperKey(getLocalSerperKey());
     setResumeMeta(getUploadedResumeMeta()); setCoverMeta(getUploadedCoverMeta());
     const p=getSavedProfile(); if(p) setProfile(p);
     setSearchHistory(getSearchHistory());
-    // Show welcome modal on first load if wizard never run
     if(!getWizardSeen()) setShowWelcome(true);
   },[]);
+
+  // When the user changes provider on the Settings tab, auto-load that
+  // provider's stored key (so switching shows the saved key without re-entry).
+  useEffect(()=>{
+    const stored=getApiKey(aiProvider);
+    setAnthropicKey(stored);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[aiProvider]);
 
   useEffect(()=>{if(tab==='applied')setAppliedJobs(getAppliedJobs());},[tab]);
   useEffect(()=>{if(!generateModal)setAppliedJobs(getAppliedJobs());},[generateModal]);
@@ -2177,8 +2227,9 @@ export default function Home() {
   };
 
   const onWizardComplete=(p:CandidateProfile,anthKey:string,serpKey:string,provider:AIProvider)=>{
-    // Persist keys to localStorage so they survive reload
-    setLocalApiKey(anthKey);
+    // Persist key to PROVIDER-SPECIFIC slot so both Claude and Gemini keys
+    // can coexist and be auto-loaded when switching providers.
+    setApiKey(provider,anthKey);
     setLocalSerperKey(serpKey);
     setAIProvider(provider);
     // Build and persist instructions
@@ -2232,6 +2283,7 @@ export default function Home() {
           .main-pad{padding:20px 16px 80px!important;}
           .header-inner{padding:0 16px!important;}
           .wizard-grid{grid-template-columns:1fr!important;}
+          .provider-toggle{grid-template-columns:1fr!important;}
         }
         @media(min-width:768px){.mobile-only{display:none!important;}}
       `}</style>
@@ -2631,43 +2683,51 @@ export default function Home() {
             <section style={{background:'#fff',border:'0.5px solid rgba(60,60,67,0.15)',borderRadius:16,padding:22,marginBottom:16,boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
               <h2 style={{fontSize:17,fontWeight:700,letterSpacing:'-0.01em',marginBottom:5,display:'flex',alignItems:'center',gap:7}}><Sparkles size={17}/>AI Provider</h2>
               <p style={{fontSize:13,color:'rgba(60,60,67,0.6)',marginBottom:16,lineHeight:1.7}}>
-                Choose which AI service to use. You can switch anytime — just update your API key below.
+                Choose which AI service to use. You can switch anytime — saved keys for each provider auto-fill.
               </p>
-              <div style={{display:'flex',gap:10,marginBottom:14}}>
+              <div className="provider-toggle" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
                 <button
                   onClick={()=>{setAiProvider('claude');setAIProvider('claude');}}
                   style={{
-                    flex:1,
                     padding:14,
                     background:aiProvider==='claude'?'rgba(0,122,255,0.1)':'#F2F2F7',
                     border:aiProvider==='claude'?'2px solid #007AFF':'2px solid transparent',
                     borderRadius:12,
                     cursor:'pointer',
                     textAlign:'left',
+                    minHeight:44, // ≥44px touch target
                   }}
                 >
                   <div style={{fontSize:14,fontWeight:700,color:'#000',marginBottom:4}}>Claude (Anthropic)</div>
-                  <div style={{fontSize:12,color:'rgba(60,60,67,0.7)'}}>Current selection</div>
+                  <div style={{fontSize:12,color:'rgba(60,60,67,0.7)'}}>
+                    {getApiKey('claude')?'✓ Key saved':'No key saved'}
+                  </div>
                 </button>
                 <button
                   onClick={()=>{setAiProvider('gemini');setAIProvider('gemini');}}
                   style={{
-                    flex:1,
                     padding:14,
                     background:aiProvider==='gemini'?'rgba(0,122,255,0.1)':'#F2F2F7',
                     border:aiProvider==='gemini'?'2px solid #007AFF':'2px solid transparent',
                     borderRadius:12,
                     cursor:'pointer',
                     textAlign:'left',
+                    minHeight:44,
                   }}
                 >
                   <div style={{fontSize:14,fontWeight:700,color:'#000',marginBottom:4}}>Gemini (Google)</div>
-                  <div style={{fontSize:12,color:'rgba(60,60,67,0.7)'}}>Free tier available</div>
+                  <div style={{fontSize:12,color:'rgba(60,60,67,0.7)'}}>
+                    {getApiKey('gemini')?'✓ Key saved · Free tier available':'Free tier available'}
+                  </div>
                 </button>
               </div>
-              {aiProvider==='gemini'&&(
-                <div style={{padding:12,background:'rgba(0,122,255,0.05)',borderRadius:10,fontSize:12,color:'rgba(60,60,67,0.7)',lineHeight:1.6}}>
-                  💡 Switched to Gemini — update your API key below to match.
+              {getApiKey(aiProvider) ? (
+                <div style={{padding:12,background:'rgba(26,122,60,0.08)',borderRadius:10,fontSize:12,color:'#1A7A3C',lineHeight:1.6}}>
+                  ✓ Using saved {getProviderName(aiProvider)} key. Edit below to change.
+                </div>
+              ) : (
+                <div style={{padding:12,background:'rgba(255,149,0,0.08)',borderRadius:10,fontSize:12,color:'#B25F00',lineHeight:1.6}}>
+                  ⚠ No {getProviderName(aiProvider)} key saved yet. Enter one below.
                 </div>
               )}
             </section>
@@ -2693,7 +2753,7 @@ export default function Home() {
                   <input type="password" value={serperKey} onChange={e=>setSerperKey(e.target.value)} placeholder="Serper key..." style={{width:'100%'}}/>
                 </div>
               </div>
-              <button onClick={()=>{setLocalApiKey(anthropicKey);setLocalSerperKey(serperKey);setKeysSaved(true);setTimeout(()=>setKeysSaved(false),2000);}} style={{display:'flex',alignItems:'center',gap:5,padding:'8px 18px',background:'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:13}}>
+              <button onClick={()=>{setApiKey(aiProvider,anthropicKey);setLocalSerperKey(serperKey);setKeysSaved(true);setTimeout(()=>setKeysSaved(false),2000);}} style={{display:'flex',alignItems:'center',gap:5,padding:'8px 18px',background:'#007AFF',color:'#fff',border:'none',borderRadius:50,cursor:'pointer',fontWeight:600,fontSize:13}}>
                 {keysSaved?<><CheckCircle size={13} fill="#fff"/>Saved</>:<><CheckSquare size={13}/>Save Keys</>}
               </button>
             </section>

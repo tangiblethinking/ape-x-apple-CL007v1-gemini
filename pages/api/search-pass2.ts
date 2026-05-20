@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { callAI, extractJSON, AIProvider } from '../../lib/ai-providers';
+import { callAI, extractJSON, AIProvider, GEMINI_JOB_ARRAY_SCHEMA } from '../../lib/ai-providers';
 import { getClaudeSearchPrompt } from '../../lib/claude-instructions';
 import { getGeminiSearchPrompt } from '../../lib/gemini-instructions';
 
@@ -118,12 +118,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     : getClaudeSearchPrompt(instructions, specialInstructions || null, titlesSearched || [], today);
 
   try {
+    // Only attach a responseSchema for Gemini. Claude returns JSON via prompt;
+    // attaching a schema to the Gemini call constrains its output to the
+    // correct job-array shape (previously misrouted to profile schema).
     const aiResponse = await callAI(
       provider,
       apiKey,
       [{ role: 'user', content: `Format: [TYPE]Company|Title|URL|Snippet\n\n${allResultsText}` }],
       systemPrompt,
-      16000
+      16000,
+      provider === 'gemini' ? GEMINI_JOB_ARRAY_SCHEMA : undefined
     );
 
     if (aiResponse.error) {

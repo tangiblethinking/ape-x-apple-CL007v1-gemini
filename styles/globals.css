@@ -247,5 +247,14 @@ input[type="checkbox"]:checked { background: var(--accent); border-color: var(--
   .main-pad { padding: 20px 16px 80px !important; }
   .header-inner { padding: 0 16px !important; }
   .wizard-grid { grid-template-columns: 1fr !important; }
+  /* Provider toggle: stack on narrow phones so each card stays tappable */
+  .provider-toggle { grid-template-columns: 1fr !important; }
+  /* Touch-target: inputs & buttons should be ≥44px tall per iOS HIG */
+  input[type="text"], input[type="password"], input[type="email"], input[type="tel"], textarea, select {
+    min-height: 44px !important;
+    font-size: 16px !important; /* prevents iOS zoom-on-focus */
+  }
+  /* Modals: take more screen on mobile */
+  .modal { max-width: 100% !important; max-height: 92vh !important; border-radius: 16px !important; }
 }
 @media (min-width: 768px) { .mobile-only { display: none !important; } }

@@ -65,10 +65,13 @@ const KEYS = {
   JOBS: 'uxjb_jobs',
   APPLIED: 'uxjb_applied',
   INSTRUCTIONS: 'uxjb_instructions',
-  API_KEY: 'uxjb_api_key',
+  API_KEY: 'uxjb_api_key', // LEGACY — kept for migration only
+  CLAUDE_API_KEY: 'uxjb_claude_api_key',
+  GEMINI_API_KEY: 'uxjb_gemini_api_key',
   SERPER_KEY: 'uxjb_serper_key',
   LAST_SEARCH: 'uxjb_last_search',
   AI_PROVIDER: 'uxjb_ai_provider', // 'claude' | 'gemini'
+  EXTRACTION_SIGNATURE: 'uxjb_extraction_signature', // {resumeHash, provider, keyHash}
 };
 
 
@@ -157,13 +160,48 @@ export function saveInstructions(instructions: SavedInstructions) {
   localStorage.setItem(KEYS.INSTRUCTIONS, JSON.stringify(instructions));
 }
 
-// ── API Keys ────────────────────────────────────────────────
+// ── API Keys (per-provider) ─────────────────────────────────
+export type AIProviderKey = 'claude' | 'gemini';
+
+// One-time migration: copy legacy single key into provider-specific slot if empty
+function migrateLegacyApiKey(provider: AIProviderKey) {
+  try {
+    const legacy = localStorage.getItem(KEYS.API_KEY);
+    if (!legacy) return;
+    const slot = provider === 'claude' ? KEYS.CLAUDE_API_KEY : KEYS.GEMINI_API_KEY;
+    if (!localStorage.getItem(slot)) {
+      // Heuristic: Claude keys start with sk-ant-, Gemini with AIza
+      if (provider === 'claude' && legacy.startsWith('sk-ant-')) {
+        localStorage.setItem(slot, legacy);
+      } else if (provider === 'gemini' && legacy.startsWith('AIza')) {
+        localStorage.setItem(slot, legacy);
+      }
+    }
+  } catch { /* noop */ }
+}
+
+export function getApiKey(provider: AIProviderKey): string {
+  return safe(() => {
+    migrateLegacyApiKey(provider);
+    const slot = provider === 'claude' ? KEYS.CLAUDE_API_KEY : KEYS.GEMINI_API_KEY;
+    return localStorage.getItem(slot) || '';
+  }, '');
+}
+
+export function setApiKey(provider: AIProviderKey, key: string) {
+  const slot = provider === 'claude' ? KEYS.CLAUDE_API_KEY : KEYS.GEMINI_API_KEY;
+  if (key) localStorage.setItem(slot, key);
+  else localStorage.removeItem(slot);
+}
+
+// Backwards-compatible wrappers — delegate to current provider
 export function getLocalApiKey(): string {
-  return safe(() => localStorage.getItem(KEYS.API_KEY) || '', '');
+  const provider = safe(() => (localStorage.getItem(KEYS.AI_PROVIDER) as AIProviderKey) || 'claude', 'claude' as AIProviderKey);
+  return getApiKey(provider);
 }
 export function setLocalApiKey(key: string) {
-  if (key) localStorage.setItem(KEYS.API_KEY, key);
-  else localStorage.removeItem(KEYS.API_KEY);
+  const provider = safe(() => (localStorage.getItem(KEYS.AI_PROVIDER) as AIProviderKey) || 'claude', 'claude' as AIProviderKey);
+  setApiKey(provider, key);
 }
 export function getLocalSerperKey(): string {
   return safe(() => localStorage.getItem(KEYS.SERPER_KEY) || '', '');
@@ -171,6 +209,50 @@ export function getLocalSerperKey(): string {
 export function setLocalSerperKey(key: string) {
   if (key) localStorage.setItem(KEYS.SERPER_KEY, key);
   else localStorage.removeItem(KEYS.SERPER_KEY);
+}
+
+// ── Extraction Signature (cache invalidation) ───────────────
+// Signature determines whether an extraction is stale.
+// If any of {resume content, provider, api key} changes,
+// the wizard MUST re-run extraction and override previous data.
+export interface ExtractionSignature {
+  resumeHash: string;
+  provider: AIProviderKey;
+  keyFingerprint: string;
+}
+
+export function computeExtractionSignature(
+  resumeText: string,
+  filename: string,
+  provider: AIProviderKey,
+  apiKey: string
+): ExtractionSignature {
+  let h = 0;
+  const input = `${filename}::${resumeText.slice(0, 4000)}`;
+  for (let i = 0; i < input.length; i++) {
+    h = ((h << 5) - h + input.charCodeAt(i)) | 0;
+  }
+  return {
+    resumeHash: h.toString(36),
+    provider,
+    keyFingerprint: apiKey.slice(-8),
+  };
+}
+
+export function getStoredExtractionSignature(): ExtractionSignature | null {
+  return safe(() => JSON.parse(localStorage.getItem(KEYS.EXTRACTION_SIGNATURE) || 'null'), null);
+}
+export function setStoredExtractionSignature(sig: ExtractionSignature) {
+  localStorage.setItem(KEYS.EXTRACTION_SIGNATURE, JSON.stringify(sig));
+}
+export function clearStoredExtractionSignature() {
+  localStorage.removeItem(KEYS.EXTRACTION_SIGNATURE);
+}
+export function isExtractionStale(current: ExtractionSignature, stored: ExtractionSignature | null): boolean {
+  if (!stored) return true;
+  return stored.resumeHash !== current.resumeHash
+    || stored.provider !== current.provider
+    || stored.keyFingerprint !== current.keyFingerprint;
 }
 
 // ── AI Provider ─────────────────────────────────────────────
@@ -326,10 +408,12 @@ export function clearSearchHistory() {
 export const EXPORT_VERSION = '1.0';
 export const ALL_KEYS = [
   'uxjb_jobs', 'uxjb_applied', 'uxjb_instructions',
-  'uxjb_api_key', 'uxjb_serper_key', 'uxjb_last_search',
+  'uxjb_api_key', 'uxjb_claude_api_key', 'uxjb_gemini_api_key',
+  'uxjb_serper_key', 'uxjb_last_search', 'uxjb_ai_provider',
   'uxjb_uploaded_resume', 'uxjb_uploaded_cover',
   'uxjb_uploaded_resume_meta', 'uxjb_uploaded_cover_meta',
   'uxjb_candidate_profile', 'uxjb_search_history',
+  'uxjb_extraction_signature',
 ];
 
 export interface AppExport {

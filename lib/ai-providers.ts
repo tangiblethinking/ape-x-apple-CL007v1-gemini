@@ -47,6 +47,56 @@ async function callClaudeAPI(
   }
 }
 
+// ── Claude Tool Use (forced) ────────────────────────────────
+// Use this for structured extraction. The tool input_schema acts as a
+// hard grammar constraint at decode time — Claude cannot return prose
+// and cannot violate the schema. Returns the tool input JSON as text.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function callClaudeWithTool(
+  apiKey: string,
+  userMessage: string,
+  systemPrompt: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tool: { name: string; description: string; input_schema: any },
+  maxTokens = 4000
+): Promise<AIResponse> {
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        tools: [tool],
+        tool_choice: { type: 'tool', name: tool.name },
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return { text: '', error: err.error?.message || `Claude tool_use API error (${response.status})` };
+    }
+
+    const data = await response.json();
+    // Find the tool_use block in the response content array
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolUseBlock = (data.content || []).find((b: any) => b.type === 'tool_use');
+    if (!toolUseBlock) {
+      return { text: '', error: 'Claude did not call the extraction tool' };
+    }
+    // Tool input is the structured JSON we want — serialize to text
+    return { text: JSON.stringify(toolUseBlock.input) };
+  } catch (err: unknown) {
+    return { text: '', error: err instanceof Error ? err.message : 'Unknown Claude tool_use error' };
+  }
+}
+
 // ── Gemini Model Resolution ─────────────────────────────────
 const geminiModelCache = new Map<string, string>();
 
@@ -122,14 +172,18 @@ async function resolveGeminiModel(apiKey: string, excludeModels: string[] = []):
   }
 }
 
-// Strict matching schema configuration for structured profile extraction
+// Profile extraction schema for Gemini responseSchema.
+// CRITICAL: Must include every field referenced by the wizard so Gemini
+// does not silently drop them. Keep it FLAT (no deeply nested optional fields)
+// per Gemini best practices — complex nested optional objects cause failures.
+// propertyOrdering hints Gemini to emit fields in the listed order.
 const GEMINI_JSON_SCHEMA = {
   type: 'OBJECT',
   properties: {
     name: { type: 'STRING' },
     email: { type: 'STRING' },
-    skills: { type: 'ARRAY', items: { type: 'STRING' } },
     phone: { type: 'STRING' },
+    skills: { type: 'ARRAY', items: { type: 'STRING' } },
     linkedinUrl: { type: 'STRING' },
     portfolioUrl: { type: 'STRING' },
     additionalLinks: {
@@ -139,7 +193,9 @@ const GEMINI_JSON_SCHEMA = {
         properties: {
           title: { type: 'STRING' },
           url: { type: 'STRING' }
-        }
+        },
+        required: ['title', 'url'],
+        propertyOrdering: ['title', 'url']
       }
     },
     mostRecentRole: { type: 'STRING' },
@@ -152,7 +208,15 @@ const GEMINI_JSON_SCHEMA = {
     salaryMin: { type: 'NUMBER' },
     salaryMax: { type: 'NUMBER' }
   },
-  required: ['name', 'email', 'skills']
+  required: ['name', 'email', 'skills'],
+  propertyOrdering: [
+    'name', 'email', 'phone', 'skills',
+    'linkedinUrl', 'portfolioUrl', 'additionalLinks',
+    'mostRecentRole', 'mostRecentEmployer', 'yearsExperience',
+    'coreStrengths', 'discipline',
+    'targetTitles', 'targetSectors',
+    'salaryMin', 'salaryMax'
+  ]
 };
 
 // ── Gemini API ──────────────────────────────────────────────
@@ -160,7 +224,9 @@ async function callGeminiAPI(
   apiKey: string,
   messages: AIMessage[],
   systemPrompt?: string,
-  maxTokens = 16000
+  maxTokens = 16000,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  responseSchema?: any
 ): Promise<AIResponse> {
   const triedModels: string[] = [];
   const maxAttempts = 3;
@@ -178,15 +244,17 @@ async function callGeminiAPI(
         parts: [{ text: msg.content }],
       }));
 
-      const isJsonTask = systemPrompt && /JSON|json object/i.test(systemPrompt);
+      // Schema is caller-controlled. If supplied, force JSON mime type AND
+      // attach the schema. If not, plain text generation (caller may still ask
+      // for JSON in the prompt and extract via extractJSON helper).
       const body: Record<string, unknown> = {
         contents,
         generationConfig: {
           maxOutputTokens: maxTokens,
-          temperature: 0.1, // Lower temp for accurate data extraction
-          ...(isJsonTask && {
+          temperature: 0.1,
+          ...(responseSchema && {
             responseMimeType: 'application/json',
-            responseSchema: GEMINI_JSON_SCHEMA
+            responseSchema
           })
         },
       };
@@ -264,10 +332,15 @@ async function callGeminiWithFileSearch(
   fileId: string,
   query: string,
   systemPrompt?: string,
-  maxTokens = 16000
+  maxTokens = 16000,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  responseSchema?: any
 ): Promise<AIResponse> {
   const triedModels: string[] = [];
   const maxAttempts = 3;
+  // File-search path is only used for profile extraction today;
+  // default to profile schema when caller didn't supply one.
+  const effectiveSchema = responseSchema || GEMINI_JSON_SCHEMA;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -318,7 +391,7 @@ async function callGeminiWithFileSearch(
           maxOutputTokens: maxTokens,
           temperature: 0.1,
           responseMimeType: 'application/json',
-          responseSchema: GEMINI_JSON_SCHEMA
+          responseSchema: effectiveSchema
         },
       };
 
@@ -394,12 +467,14 @@ export async function callAI(
   apiKey: string,
   messages: AIMessage[],
   systemPrompt?: string,
-  maxTokens = 16000
+  maxTokens = 16000,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  geminiResponseSchema?: any
 ): Promise<AIResponse> {
   if (provider === 'claude') {
     return callClaudeAPI(apiKey, messages, systemPrompt, maxTokens);
   } else {
-    return callGeminiAPI(apiKey, messages, systemPrompt, maxTokens);
+    return callGeminiAPI(apiKey, messages, systemPrompt, maxTokens, geminiResponseSchema);
   }
 }
 
@@ -410,14 +485,85 @@ export async function callAIWithFileSearch(
   fileId: string,
   query: string,
   systemPrompt?: string,
-  maxTokens = 16000
+  maxTokens = 16000,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  geminiResponseSchema?: any
 ): Promise<AIResponse> {
   if (provider === 'claude') {
     return callClaudeAPI(apiKey, [{ role: 'user', content: query }], systemPrompt, maxTokens);
   } else {
-    return callGeminiWithFileSearch(apiKey, fileId, query, systemPrompt, maxTokens);
+    return callGeminiWithFileSearch(apiKey, fileId, query, systemPrompt, maxTokens, geminiResponseSchema);
   }
 }
+
+// ── Exported Schemas (for caller-supplied responseSchema) ──
+export const GEMINI_PROFILE_SCHEMA = GEMINI_JSON_SCHEMA;
+
+// Job-card array schema for the search-pass2 endpoint. Keep flat per Gemini
+// best practices (long descriptions and arrays-of-objects only at top level).
+export const GEMINI_JOB_ARRAY_SCHEMA = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      id: { type: 'STRING' },
+      company: { type: 'STRING' },
+      title: { type: 'STRING' },
+      category: { type: 'STRING' },
+      isRemote: { type: 'BOOLEAN' },
+      isHybrid: { type: 'BOOLEAN' },
+      isOnsite: { type: 'BOOLEAN' },
+      location: { type: 'STRING' },
+      industry: { type: 'ARRAY', items: { type: 'STRING' } },
+      salaryMin: { type: 'NUMBER' },
+      salaryMax: { type: 'NUMBER' },
+      salaryDisplay: { type: 'STRING' },
+      salaryNote: { type: 'STRING' },
+      rating: { type: 'NUMBER' },
+      auditLabel: { type: 'STRING' },
+      roleSummary: { type: 'STRING' },
+      whyYouFit: { type: 'ARRAY', items: { type: 'STRING' } },
+      requirements: { type: 'ARRAY', items: { type: 'STRING' } },
+      companyInfo: { type: 'STRING' },
+      goldFlags: { type: 'ARRAY', items: { type: 'STRING' } },
+      redFlags: { type: 'ARRAY', items: { type: 'STRING' } },
+      applyUrl: { type: 'STRING' },
+      careersUrl: { type: 'STRING' },
+      aboutUrl: { type: 'STRING' },
+      jobDescUrl: { type: 'STRING' },
+      postedDate: { type: 'STRING' },
+      excluded: { type: 'BOOLEAN' },
+      layerFailed: { type: 'STRING' },
+      reason: { type: 'STRING' }
+    },
+    required: ['id', 'company', 'title', 'excluded']
+  }
+};
+
+// Single job-card object schema for analyze-job endpoint.
+export const GEMINI_JOB_CARD_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    category: { type: 'STRING' },
+    isRemote: { type: 'BOOLEAN' },
+    isHybrid: { type: 'BOOLEAN' },
+    isOnsite: { type: 'BOOLEAN' },
+    location: { type: 'STRING' },
+    industry: { type: 'ARRAY', items: { type: 'STRING' } },
+    salaryMin: { type: 'NUMBER' },
+    salaryMax: { type: 'NUMBER' },
+    salaryDisplay: { type: 'STRING' },
+    salaryNote: { type: 'STRING' },
+    rating: { type: 'NUMBER' },
+    roleSummary: { type: 'STRING' },
+    whyYouFit: { type: 'ARRAY', items: { type: 'STRING' } },
+    requirements: { type: 'ARRAY', items: { type: 'STRING' } },
+    companyInfo: { type: 'STRING' },
+    goldFlags: { type: 'ARRAY', items: { type: 'STRING' } },
+    redFlags: { type: 'ARRAY', items: { type: 'STRING' } }
+  },
+  required: ['category', 'rating', 'roleSummary']
+};
 
 // ── JSON Extraction Helper ──────────────────────────────────
 export function extractJSON(raw: string): string {
