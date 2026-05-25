@@ -118,7 +118,7 @@ async function parseFileBase64(file: File): Promise<string> {
   console.log('Sending via base64 fallback, size:', base64.length);
   
   // Try full parsing first
-  let response = await fetch('/api/parse-resume-base64', {
+  let response = await fetch('/ape/api/parse-resume-base64', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -130,7 +130,7 @@ async function parseFileBase64(file: File): Promise<string> {
   // If that fails, try simple parsing (no external libs)
   if (!response.ok) {
     console.log('Base64 parsing failed, trying simple parsing...');
-    response = await fetch('/api/parse-simple', {
+    response = await fetch('/ape/api/parse-simple', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -246,7 +246,7 @@ async function parseFile(file: File): Promise<string> {
       console.log('FormData created, file appended');
       console.log('Sending to /api/parse-resume...');
 
-      const response = await fetch('/api/parse-resume', {
+      const response = await fetch('/ape/api/parse-resume', {
         method: 'POST',
         body: formData,
       });
@@ -600,7 +600,7 @@ function SetupWizard({initialProfile,initialAnthropicKey,initialSerperKey,initia
         requestBody.resumeText=text;
       }
 
-      const res=await fetch('/api/extract-profile',{
+      const res=await fetch('/ape/api/extract-profile',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(requestBody),
       });
@@ -1411,7 +1411,7 @@ function GenerateModal({job,type,onClose,instructions,apiKey,aiProvider}:{
   const generate=async()=>{
     setLoading(true);setDismissed(false);setError('');setHtml('');
     try{
-      const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+      const res=await fetch('/ape/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           type,jobData:job,jobDescription:jd,instructions,apiKeyOverride:apiKey,aiProvider,
           uploadedTemplate:type==='resume'?getUploadedResume():getUploadedCover(),
@@ -2004,7 +2004,7 @@ export default function Home() {
     try{
       // Pass 1 — search and classify
       setSearchPhase(1);
-      const res1=await fetch('/api/search-pass1',{method:'POST',headers:{'Content-Type':'application/json'},
+      const res1=await fetch('/ape/api/search-pass1',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({instructions:jobSearchInstr,specialInstructions,apiKeyOverride:anthropicKey,serperKeyOverride:serperKey,aiProvider})});
       if(abortRef.current) return;
       const data1=await safeJson(res1);
@@ -2013,7 +2013,7 @@ export default function Home() {
 
       // Pass 2 — verify and build job cards
       setSearchPhase(2);
-      const res2=await fetch('/api/search-pass2',{method:'POST',headers:{'Content-Type':'application/json'},
+      const res2=await fetch('/ape/api/search-pass2',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           trusted:data1.trusted||[],
           aggregators:data1.aggregators||[],
@@ -2091,7 +2091,7 @@ export default function Home() {
     setAnalyzeModal(excl);
     setAnalyzingJob(excl.id);
     // Fire analysis in background
-    fetch('/api/analyze-job',{
+    fetch('/ape/api/analyze-job',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         company:excl.company,title:excl.title,
