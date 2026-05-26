@@ -108,9 +108,6 @@ export default async function handler(
 
     if (provider === 'claude') {
       // CLAUDE PATH: Use forced tool_use for schema-constrained extraction.
-      // This eliminates URL hallucination by binding the model's output to the
-      // input_schema (URLs cannot appear unless they fit the schema rules in
-      // the tool description, and the model is forced to consider each field).
       const systemPrompt = getClaudeExtractProfilePrompt();
       const userMsg = `Extract profile data from this resume by calling the extract_profile tool. Remember: URLs must appear verbatim in the resume — never guess.\n\n--- RESUME START ---\n${resumeText.slice(0, 12000)}\n--- RESUME END ---`;
       const r = await callClaudeWithTool(apiKey, userMsg, systemPrompt, CLAUDE_EXTRACT_PROFILE_TOOL, 4000);
@@ -118,15 +115,26 @@ export default async function handler(
       extractError = r.error;
     } else {
       // GEMINI PATH: Use responseSchema (profile schema explicitly attached).
-      // Schema is the structural hard constraint; system prompt provides the
-      // step-by-step protocol.
       const systemPrompt = getGeminiExtractProfilePrompt();
+
+      const marker = '\n\nEMBEDDED LINKS:\n';
+      let processedText = resumeText;
+
+      if (resumeText.includes(marker)) {
+        const parts = resumeText.split(marker);
+        const mainText = parts[0];
+        const linksSection = parts.slice(1).join(marker);
+        processedText = `${mainText.slice(0, 50000)}${marker}${linksSection}`;
+      } else {
+        processedText = resumeText.slice(0, 50000);
+      }
+
       const r = await callAI(
         provider,
         apiKey,
         [{
           role: 'user',
-          content: `Extract profile data from this resume:\n\n${resumeText.slice(0, 12000)}`,
+          content: `Extract profile data from this resume:\n\n${processedText}`,
         }],
         systemPrompt,
         4000,
