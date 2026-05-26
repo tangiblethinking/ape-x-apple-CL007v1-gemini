@@ -141,7 +141,7 @@ Prioritize results that match these exact titles or very close variants.`;
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     if (aiProvider === 'gemini') {
-      // CL012: Provider-agnostic Gemini path with retry loop for 503/429
+      // Provider-agnostic Gemini path with retry loop for 503/429
       let attempts = 0;
       const maxAttempts = 3;
       let geminiRes: Response | undefined;
