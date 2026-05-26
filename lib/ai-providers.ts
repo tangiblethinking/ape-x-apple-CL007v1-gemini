@@ -279,17 +279,12 @@ async function callGeminiAPI(
         const apiMsg = err.error?.message || `Gemini API error (${response.status})`;
         const status = err.error?.status || '';
 
-        const isQuotaError = response.status === 429
+        const isTransientError = response.status === 429
+          || response.status === 503
           || status === 'RESOURCE_EXHAUSTED'
-          || /quota|rate limit|exceeded/i.test(apiMsg);
+          || /quota|rate limit|exceeded|high demand|overloaded|unavailable/i.test(apiMsg);
 
-        if (isQuotaError && attempt < maxAttempts - 1) {
-          triedModels.push(model);
-          geminiModelCache.delete(apiKey);
-          continue;
-        }
-
-        if (response.status === 503 && attempt < maxAttempts - 1) {
+        if (isTransientError && attempt < maxAttempts - 1) {
           const delay = (1500 * (attempt + 1)) + (Math.random() * 1000);
           await new Promise(r => setTimeout(r, delay));
           continue;
@@ -421,18 +416,13 @@ async function callGeminiWithFileSearch(
         const apiMsg = err.error?.message || `Gemini File Search error (${response.status})`;
         const status = err.error?.status || '';
 
-        const isQuotaError =
+        const isTransientError =
           response.status === 429 ||
+          response.status === 503 ||
           status === 'RESOURCE_EXHAUSTED' ||
-          /quota|rate limit|exceeded/i.test(apiMsg);
+          /quota|rate limit|exceeded|high demand|overloaded|unavailable/i.test(apiMsg);
 
-        if (isQuotaError && attempt < maxAttempts - 1) {
-          triedModels.push(model);
-          geminiModelCache.delete(apiKey);
-          continue;
-        }
-
-        if (response.status === 503 && attempt < maxAttempts - 1) {
+        if (isTransientError && attempt < maxAttempts - 1) {
           const delay = (1500 * (attempt + 1)) + (Math.random() * 1000);
           await new Promise(r => setTimeout(r, delay));
           continue;
