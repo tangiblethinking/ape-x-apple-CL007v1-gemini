@@ -138,24 +138,53 @@ Prioritize results that match these exact titles or very close variants.`;
 
     let rawText = '[]';
 
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     if (aiProvider === 'gemini') {
-      // FIX BUG2: Gemini path
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: userMessageContent }] }],
-            systemInstruction: { parts: [{ text: systemPromptFull }] },
-            generationConfig: { maxOutputTokens: 16000, temperature: 0.1 }
-          }),
+      // CL012: Provider-agnostic Gemini path with retry loop for 503/429
+      let attempts = 0;
+      const maxAttempts = 3;
+      let geminiRes: Response | undefined;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+
+        geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: userMessageContent }] }],
+              systemInstruction: { parts: [{ text: systemPromptFull }] },
+              generationConfig: { maxOutputTokens: 16000, temperature: 0.1 }
+            }),
+          }
+        );
+
+        if (geminiRes.ok) break;
+
+        if (geminiRes.status === 503 || geminiRes.status === 429) {
+          if (attempts < maxAttempts) {
+            const baseDelay = 1500;
+            const jitter = Math.random() * 1000;
+            const delay = (baseDelay * attempts) + jitter;
+            console.warn(`[Gemini API] High demand (${geminiRes.status}). Retry ${attempts}/${maxAttempts} in ${Math.round(delay)}ms...`);
+            await sleep(delay);
+            continue;
+          }
         }
-      );
-      if (!geminiRes.ok) {
-        const err = await geminiRes.json();
-        return res.status(geminiRes.status).json({ error: err.error?.message || 'Gemini API error' });
+
+        break;
       }
+
+      if (!geminiRes || !geminiRes.ok) {
+        const err = geminiRes ? await geminiRes.json() : { error: { message: 'Network or infrastructure timeout' } };
+        return res.status(geminiRes ? geminiRes.status : 500).json({
+          error: err.error?.message || 'Gemini API currently experiencing high demand. Please try again shortly.'
+        });
+      }
+
       const geminiData = await geminiRes.json();
       rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
     } else {
