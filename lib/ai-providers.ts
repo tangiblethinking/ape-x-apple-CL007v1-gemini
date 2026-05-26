@@ -289,6 +289,12 @@ async function callGeminiAPI(
           continue;
         }
 
+        if (response.status === 503 && attempt < maxAttempts - 1) {
+          const delay = (1500 * (attempt + 1)) + (Math.random() * 1000);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+
         if (response.status === 404 && attempt < maxAttempts - 1) {
           triedModels.push(model);
           geminiModelCache.delete(apiKey);
@@ -423,6 +429,12 @@ async function callGeminiWithFileSearch(
         if (isQuotaError && attempt < maxAttempts - 1) {
           triedModels.push(model);
           geminiModelCache.delete(apiKey);
+          continue;
+        }
+
+        if (response.status === 503 && attempt < maxAttempts - 1) {
+          const delay = (1500 * (attempt + 1)) + (Math.random() * 1000);
+          await new Promise(r => setTimeout(r, delay));
           continue;
         }
 
