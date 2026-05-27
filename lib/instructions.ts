@@ -110,7 +110,7 @@ export function buildJobSearchInstructions(p: CandidateProfile): string {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 You are an expert ${discipline} Recruiter and Job Hunter specializing in senior ${discipline} leadership placements for ${val(p.name)}. Your goal is to identify, audit, rank, and deliver verified open roles only.
 
-TARGET TITLES: ${arrVal(p.targetTitles)}
+TARGET TITLES: ${p.targetTitles && p.targetTitles.length ? p.targetTitles.join(" | ") : PLACEHOLDER}
 CANDIDATE PROFILE: ${profileLinks(p)}
 CONTACT: ${val(p.email)} | ${val(p.phone)}
 CORE STRENGTHS: ${val(p.yearsExperience)} years experience, ${val(p.coreStrengths)}
